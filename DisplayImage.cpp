@@ -216,7 +216,7 @@ Mat FindEdges(const Mat& mat, Mat& angles, HoughType houghType) {
 
     sort(filtering.begin(), filtering.end());
 
-    vector<IPoint> filtered = vector<IPoint>(filtering.begin(), filtering.begin() + filtering.size() * 0.05);
+    vector<IPoint> filtered = vector<IPoint>(filtering.begin(), filtering.begin() + filtering.size() * 0.005);
 
     Mat edges = Mat::zeros(deltaI.rows, deltaI.cols, CV_32SC1);
 
@@ -376,8 +376,9 @@ void runAlongLine(const Mat& I, vector <Mat>& C, Cell p0, Cell p1, int scale, in
     // cout << "kek" << endl;
 }
 
-void runRectangle(const Mat& I, vector <Mat>& Cangles, int scale, int scaleAngle, IPoint& curMax, int phi, int R, int k, int i, int j) {
-    for (int r = R - 2; r < R + 2; r++) {
+void runRectangle(const Mat& I, vector <Mat>& Cangles, int scale, int scaleAngle, IPoint& curMax, int phi, int R, 
+    double k, int i, int j) {
+    for (int r = R - 2; r <=  R + 2; r++) {
 
         // int curAngle = angles.at<int>(i, j) + phi;
         int curAngle = phi;
@@ -389,19 +390,20 @@ void runRectangle(const Mat& I, vector <Mat>& Cangles, int scale, int scaleAngle
         for (int angle = start; angle <= finish; angle += scaleAngle) {
             int curHeight = r;
             int curWidth = k * r;
+            // cout << curHeight << "  " << curWidth << "  " << k << endl;
 
-            Cell pul = Cell(i - curHeight, j - curWidth);
-            Cell pur = Cell(i - curHeight, j + curWidth);
-            Cell pdl = Cell(i + curHeight, j - curWidth);
-            Cell pdr = Cell(i + curHeight, j + curWidth);
+            Cell ptl = Cell(i - curHeight, j - curWidth);
+            Cell ptr = Cell(i - curHeight, j + curWidth);
+            Cell pbr = Cell(i + curHeight, j + curWidth);
+            Cell pbl = Cell(i + curHeight, j - curWidth);
 
-            vector <Cell> rectCoords = { pul, pur, pdl, pdr };
+            vector <Cell> rectCoords = { ptl, ptr, pbr, pbl };
             vector <Cell> rotateCoords = rotateRect(rectCoords, Cell(i, j), angle);
 
             runAlongLine(I, Cangles, rotateCoords[0], rotateCoords[1], scale, scaleAngle, curMax, angle);
+            runAlongLine(I, Cangles, rotateCoords[1], rotateCoords[2], scale, scaleAngle, curMax, angle);
             runAlongLine(I, Cangles, rotateCoords[2], rotateCoords[3], scale, scaleAngle, curMax, angle);
-            runAlongLine(I, Cangles, rotateCoords[0], rotateCoords[2], scale, scaleAngle, curMax, angle);
-            runAlongLine(I, Cangles, rotateCoords[1], rotateCoords[3], scale, scaleAngle, curMax, angle);
+            runAlongLine(I, Cangles, rotateCoords[3], rotateCoords[0], scale, scaleAngle, curMax, angle);
         }
         // cout << "asdasdas" << endl;
     }
@@ -420,15 +422,14 @@ vector <Mat> HoughRectMy(const Mat& I, const Mat& edgesChar, int height, int wid
     }
 
     int R = height;
-    double k = (width / (double)height);
-    int tmp = k * R;
+    double k = ((double)width / (double)height);
     for (int i = 0; i < edgesChar.rows; i++) {
         for (int j = 0; j < edgesChar.cols; j++) {
             if (edgesChar.at<uchar>(i, j) == 0) {
                 continue;
             }
             runRectangle(I, Cangles, scale, scaleAngle, curMax, angles.at<int>(i, j), R, k, i, j);
-            runRectangle(I, Cangles, scale, scaleAngle, curMax, angles.at<int>(i, j) + 90, R, k, i, j);
+            runRectangle(I, Cangles, scale, scaleAngle, curMax, angles.at<int>(i, j) - 90, R, k, i, j);
         }
     }
 
@@ -518,7 +519,7 @@ int main(int argc, char** argv) {
     src = imread(argv[1]);
     GaussianBlur(src, src, Size(3,3), 0, 0, BORDER_DEFAULT );
     T = src;
-    resize(src, T, Size(500, 300));
+    // resize(src, T, Size(400, 300));
 
     cvtColor(T, I, CV_BGR2GRAY);
 
@@ -531,11 +532,14 @@ int main(int argc, char** argv) {
     gate_hs_distr = blured;
 
     auto filtered = hsv_filter(T, gate_hs_distr);
+    // auto filtered = imread(argv[1], 0);
 
+    // imshow("filtered", filtered);
     Mat angles;
 
     Mat edgesChar = FindEdges(filtered, angles, HoughType::LINES);
 
+    // imshow("grad", edgesChar);
     //Mat angles1 = SobelGrad(I);
 
 
@@ -550,20 +554,24 @@ int main(int argc, char** argv) {
     IPoint curMax2 = IPoint(-1, Cell(-1, -1));
     // cout << "as,hfdkjdf" << endl;
     int scaleAngle = 5;
-    vector <Mat> C2 = HoughRectMy(I, edgesChar, 50 / 2, 150 / 2, 
+    vector <Mat> C2 = HoughRectMy(I, edgesChar, 25, 300, 
         angles, 5, scaleAngle, curMax2);
+    // vector <Mat> C2 = HoughRectMy(I, edgesChar, 300, 60, 
+    //     angles, 5, scaleAngle, curMax2);
+
 
     Mat C3;
     int scaledAngle = curMax2.angle / scaleAngle;
-    resize(C2[scaledAngle], C3, Size(C2[scaledAngle].cols * 4, 
-        C2[scaledAngle].rows * 4));
+    resize(C2[scaledAngle], C3, Size(C2[scaledAngle].cols * 5, 
+        C2[scaledAngle].rows * 5));
 
     vector<Cell> points;
     points.push_back(curMax2.cell);
     // cout << curMax2.cell.row << "    " << curMax2.cell.col << "    " << curMax2.angle << endl;
     // cout << "dkasj;kasj" << endl;
     // cout << curMax2.angle << endl;
-    drawRect(T, points, 50, 150, 5, curMax2.angle);
+    drawRect(T, points, 2 * 25, 300, 5, curMax2.angle);
+   // drawRect(T, points, 300, 60, 5, curMax2.angle);
 
     // Mat C1 = HoughLineMy(I, edgesChar, offset, angles);
     // threshHold(C1, 200);
@@ -573,7 +581,7 @@ int main(int argc, char** argv) {
     imshow("T", T);
     // imshow("C1", C1);
     // imshow("C1", C1[curMax1.angle]);
-    imshow("C2", C2[scaledAngle]);
+    // imshow("C2", C2[scaledAngle]);
     imshow("C3", C3);
     // imwrite("out" + string(argv[1]), T);
     waitKey(0);
