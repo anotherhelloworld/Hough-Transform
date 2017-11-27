@@ -1,5 +1,3 @@
-#pragma once
-
 #include <iostream>
 #include <type_traits>
 #include <functional>
@@ -124,7 +122,7 @@ public:
 
         sort(filtering.begin(), filtering.end());
 
-        std::vector<AccumPoint> filtered(filtering.begin(), filtering.begin() + filtering.size() * 0.005);
+        std::vector<AccumPoint> filtered(filtering.begin(), filtering.begin() + filtering.size() * 0.5);
 
         cv::Mat edges = cv::Mat::zeros(delta_i.rows, delta_i.cols, CV_32SC1);
 
@@ -298,7 +296,7 @@ public:
     cv::Mat recognize(std::string filename)
     {
         cv::Mat image, src;
-        src = cv::imread(filename);
+        src = cv::imread(filename, 1);
         cv::GaussianBlur(src, src, cv::Size(3,3), 0, 0, cv::BORDER_DEFAULT);
 
         cv::cvtColor(src, image, CV_BGR2GRAY);
@@ -310,10 +308,10 @@ public:
         cv::blur(dilated, blured, cv::Size(7, 7));
         gate_hs_distr = blured;
 
-        auto filtered = hsv_filter(src, gate_hs_distr);
+        auto filtered = src;//hsv_filter(src, gate_hs_distr);
         cv::Mat angles;
 
-        cv::Mat edges_char = find_edges(filtered, angles);
+        cv::Mat edges_char = find_edges(src, angles);
         int offset = 0;
 
         AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
@@ -329,14 +327,17 @@ public:
         draw_rect(src, points, 2 * 25, 300, 5, max_accum.angle);
 
         imshow("src", src);
-        imshow("C3", C3);
+//        imshow("C3", C3);
+//        imshow("edges", edges_char);
+//        imshow("filtered", filtered);
         return src;
     }
 };
 
 int main(int argc, char* argv[]) {
-    HoughLaneRecognizer hr("orange_lane_hs.png", 25, 300, 5, 5);
-    hr.recognize(argv[1]);
+    HoughLaneRecognizer hr("orange_lane_hs.png", 25, 150, 5, 5);
+//    hr.recognize(argv[1]);
+
     waitKey(0);
     return 0;
 }

@@ -6,4 +6,7 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
 
 set(SOURCE_FILES main.cpp)
 add_executable(transform ${SOURCE_FILES})
-target_link_libraries( transform ${OpenCV_LIBS} )
+add_executable(drawImage drawTestRect.cpp)
+
+target_link_libraries(transform ${OpenCV_LIBS})
+target_link_libraries(drawImage ${OpenCV_LIBS})
