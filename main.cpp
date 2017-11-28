@@ -132,6 +132,8 @@ public:
 
         cv::Mat edges_char = int_to_char(edges);
 
+//        imshow("delta_i", delta_i);
+
         return edges_char;
     }
 
@@ -301,19 +303,21 @@ public:
 
         cv::cvtColor(src, image, CV_BGR2GRAY);
 
-        cv::Mat gate_hs_distr = cv::imread(hsv_distr.c_str(), 0);
-        cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(11, 11));
-        cv::Mat dilated, blured;
-        cv::dilate(gate_hs_distr, dilated, element);
-        cv::blur(dilated, blured, cv::Size(7, 7));
-        gate_hs_distr = blured;
+//        cv::Mat gate_hs_distr = cv::imread(hsv_distr.c_str(), 0);
+//        cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(11, 11));
+//        cv::Mat dilated, blured;
+//        cv::dilate(gate_hs_distr, dilated, element);
+//        cv::blur(dilated, blured, cv::Size(7, 7));
+//        gate_hs_distr = blured;
 
-        auto filtered = src;//hsv_filter(src, gate_hs_distr);
+        auto filtered = image;//hsv_filter(src, gate_hs_distr);
+
         cv::Mat angles;
 
-        cv::Mat edges_char = find_edges(src, angles);
-        int offset = 0;
-
+        cv::Mat edges_char = find_edges(filtered, angles);
+//        imshow("edges_char", edges_char);
+//        int offset = 0;
+//
         AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
         std::vector <cv::Mat> accum = hough_rect(image, edges_char, angles,  max_accum);
 
@@ -324,19 +328,19 @@ public:
 
         std::vector<Cell> points;
         points.push_back(max_accum.cell);
-        draw_rect(src, points, 2 * 25, 300, 5, max_accum.angle);
+        draw_rect(src, points, 100, 300, 5, max_accum.angle);
 
         imshow("src", src);
-//        imshow("C3", C3);
-//        imshow("edges", edges_char);
-//        imshow("filtered", filtered);
+        imshow("C3", C3);
+        imshow("edges", edges_char);
+        imshow("filtered", filtered);
         return src;
     }
 };
 
 int main(int argc, char* argv[]) {
-    HoughLaneRecognizer hr("orange_lane_hs.png", 25, 150, 5, 5);
-//    hr.recognize(argv[1]);
+    HoughLaneRecognizer hr("orange_lane_hs.png", 50, 150, 5, 5);
+    hr.recognize(argv[1]);
 
     waitKey(0);
     return 0;
