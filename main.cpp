@@ -22,21 +22,18 @@ class HoughLaneRecognizer
 {
 public:
 
-    std::string hsv_distr;
     int hough_height;
     int hough_width;
     int hough_scale;
     int hough_scale_angle;
 
     HoughLaneRecognizer(
-            std::string hsv_distr,
             int hough_height,
             int hough_width,
             int hough_scale,
             int hough_scale_angle
             )
-            : hsv_distr(hsv_distr)
-            , hough_height(hough_height)
+            : hough_height(hough_height)
             , hough_width(hough_width)
             , hough_scale(hough_scale)
             , hough_scale_angle(hough_scale_angle)
@@ -131,8 +128,6 @@ public:
         }
 
         cv::Mat edges_char = int_to_char(edges);
-
-//        imshow("delta_i", delta_i);
 
         return edges_char;
     }
@@ -295,53 +290,47 @@ public:
         return res;
     }
 
-    cv::Mat recognize(std::string filename)
+    cv::Mat recognize(InputArray _src)
     {
-        cv::Mat image, src;
-        src = cv::imread(filename, 1);
-        cv::GaussianBlur(src, src, cv::Size(3,3), 0, 0, cv::BORDER_DEFAULT);
+        cv::Mat src;
+        cv::Mat image;
+        cv::GaussianBlur(_src, src, cv::Size(3,3), 0, 0, cv::BORDER_DEFAULT);
 
-        cv::cvtColor(src, image, CV_BGR2GRAY);
-
-//        cv::Mat gate_hs_distr = cv::imread(hsv_distr.c_str(), 0);
-//        cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(11, 11));
-//        cv::Mat dilated, blured;
-//        cv::dilate(gate_hs_distr, dilated, element);
-//        cv::blur(dilated, blured, cv::Size(7, 7));
-//        gate_hs_distr = blured;
-
-        auto filtered = image;//hsv_filter(src, gate_hs_distr);
+        cv::cvtColor(src, src, CV_BGR2GRAY);
 
         cv::Mat angles;
 
-        cv::Mat edges_char = find_edges(filtered, angles);
-//        imshow("edges_char", edges_char);
-//        int offset = 0;
-//
-        AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
-        std::vector <cv::Mat> accum = hough_rect(image, edges_char, angles,  max_accum);
+        cv::Mat edges_char = find_edges(src, angles);
 
-        cv::Mat C3;
-        int scaled_angle = max_accum.angle / hough_scale_angle;
-        resize(accum[scaled_angle], C3, cv::Size(accum[scaled_angle].cols * 5,
-                                                 accum[scaled_angle].rows * 5));
+        AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
+        std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
+
+//        cv::Mat resized_accum;
+//        int scaled_angle = max_accum.angle / hough_scale_angle;
+//        resize(accum[scaled_angle], resized_accum, cv::Size(accum[scaled_angle].cols * 5,
+//                                                 accum[scaled_angle].rows * 5));
 
         std::vector<Cell> points;
         points.push_back(max_accum.cell);
         draw_rect(src, points, 100, 300, 5, max_accum.angle);
 
         imshow("src", src);
-        imshow("C3", C3);
-        imshow("edges", edges_char);
-        imshow("filtered", filtered);
+//        imshow("max_accum", resized_accum);
+//        imshow("edges", edges_char);
+//        imshow("filtered", filtered);
         return src;
     }
 };
 
-int main(int argc, char* argv[]) {
-    HoughLaneRecognizer hr("orange_lane_hs.png", 50, 150, 5, 5);
-    hr.recognize(argv[1]);
+void HoughRect(InputArray src_image, int rect_height, int rect_width, int accum_scale, int angle_scale) {
+    HoughLaneRecognizer hr(rect_height, rect_width, accum_scale, angle_scale);
+//    cv::Mat src = cv::cvarrToMat(src_image);
+    hr.recognize(src_image);
+}
 
+int main(int argc, char* argv[]) {
+    cv::Mat src = cv::imread(argv[1], 1);
+    HoughRect(src, 50, 150, 5, 5);
     waitKey(0);
     return 0;
 }
