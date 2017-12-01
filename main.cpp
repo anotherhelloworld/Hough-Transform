@@ -22,18 +22,24 @@ class HoughLaneRecognizer
 {
 public:
 
+    int src_height;
+    int src_width;
     int hough_height;
     int hough_width;
     int hough_scale;
     int hough_scale_angle;
 
     HoughLaneRecognizer(
+            int src_height,
+            int src_width,
             int hough_height,
             int hough_width,
             int hough_scale,
             int hough_scale_angle
             )
-            : hough_height(hough_height)
+            : src_height(src_height)
+            , src_width(src_width)
+            , hough_height(hough_height)
             , hough_width(hough_width)
             , hough_scale(hough_scale)
             , hough_scale_angle(hough_scale_angle)
@@ -224,8 +230,8 @@ public:
     std::vector <cv::Mat> hough_rect(
             const cv::Mat& image,
             const cv::Mat& edges_char,
-            const cv::Mat&
-            angles, AccumPoint& max_accum)
+            const cv::Mat& angles,
+            AccumPoint& max_accum)
     {
         int max_angle = (180 + 1) / hough_scale_angle;
         std::vector <cv::Mat> angles_accum(max_angle + 1);
@@ -290,7 +296,7 @@ public:
         return res;
     }
 
-    cv::Mat recognize(InputArray _src)
+    CvSeq* recognize(InputArray _src)
     {
         cv::Mat src;
         cv::Mat image;
@@ -305,32 +311,45 @@ public:
         AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
         std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
 
-//        cv::Mat resized_accum;
-//        int scaled_angle = max_accum.angle / hough_scale_angle;
-//        resize(accum[scaled_angle], resized_accum, cv::Size(accum[scaled_angle].cols * 5,
-//                                                 accum[scaled_angle].rows * 5));
-
         std::vector<Cell> points;
         points.push_back(max_accum.cell);
-        draw_rect(src, points, 100, 300, 5, max_accum.angle);
 
-        imshow("src", src);
-//        imshow("max_accum", resized_accum);
-//        imshow("edges", edges_char);
-//        imshow("filtered", filtered);
-        return src;
+        points[0].col = points[0].col * this->hough_scale + this->hough_scale / 2;
+        points[0].row = points[0].row * this->hough_scale + this->hough_scale / 2;
+
+        cv::RotatedRect* rRect = new cv::RotatedRect(Point2f(points[0].col, points[0].row),
+                                                     Size2f(this->src_width, this->src_height),
+                                                     max_accum.angle);
+
+        CvMemStorage* seqMem = cvCreateMemStorage(0);
+        CvSeq* seq = cvCreateSeq(0, sizeof(CvSeq), sizeof(cv::RotatedRect), seqMem);
+        cvSeqPush(seq, rRect);
+        return seq;
     }
 };
 
-void HoughRect(InputArray src_image, int rect_height, int rect_width, int accum_scale, int angle_scale) {
-    HoughLaneRecognizer hr(rect_height, rect_width, accum_scale, angle_scale);
-//    cv::Mat src = cv::cvarrToMat(src_image);
-    hr.recognize(src_image);
+CV_IMPL CvSeq*
+cvHoughRect(InputArray src_image, int rect_height,
+            int rect_width, int accum_scale, int angle_scale, int min_angle, int max_angle)
+{
+    HoughLaneRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale);
+    return hr.recognize(src_image);
 }
 
 int main(int argc, char* argv[]) {
     cv::Mat src = cv::imread(argv[1], 1);
-    HoughRect(src, 50, 150, 5, 5);
+    CvSeq* seq = cvHoughRect(src, 100, 300, 5, 5, 0, 180);
+    cv::RotatedRect* res = (cv::RotatedRect*)cvGetSeqElem(seq, 0);
+
+    Point2f vertices[4];
+    res->points(vertices);
+    for (int i = 0; i < 4; i++) {
+        line(src, vertices[i], vertices[(i + 1) % 4], Scalar(0, 0, 255), 2);
+    }
+    std::string name = "ans" + std::string(argv[1]);
+
+    imshow(name, src);
+//    imwrite(name, src);
     waitKey(0);
     return 0;
 }
