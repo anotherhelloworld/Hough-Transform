@@ -97,7 +97,7 @@ public:
         return normalize_mat(mat, _max);
     }
 
-    cv::Mat find_edges(const cv::Mat& mat, cv::Mat& angles)
+    cv::Mat find_edges(const cv::Mat& mat, cv::Mat& angles, bool& empty)
     {
         cv::Mat delta_i = cv::Mat::zeros(mat.rows - 1, mat.cols - 1, CV_32SC1);
         std::vector<AccumPoint> filtering;
@@ -125,11 +125,15 @@ public:
 
         sort(filtering.begin(), filtering.end());
 
-        std::vector<AccumPoint> filtered(filtering.begin(), filtering.begin() + filtering.size() * 0.5);
+        std::vector<AccumPoint> filtered(filtering.begin(), filtering.begin() + filtering.size() * 5 / 10);
+
+        if (filtered.size() == 0) {
+            empty = true;
+        }
 
         cv::Mat edges = cv::Mat::zeros(delta_i.rows, delta_i.cols, CV_32SC1);
 
-        for (auto point: filtered) {
+        for (auto &point: filtered) {
             edges.at<int>(point.cell.row, point.cell.col) = point.value;
         }
 
@@ -253,7 +257,30 @@ public:
             }
         }
 
+        int scaled_angle = max_accum.angle / hough_scale_angle;
+        if (scaled_angle < angles_accum.size()) {
+            
+        }
+        cv::Mat mat_max_accum = angles_accum[scaled_angle];
+
+//        double sum = cv::sum(mat_max_accum)[0];
+
+        int sum = 0;
+
+        for (int i = 0; i < mat_max_accum.rows; i++) {
+            for (int j = 0; j < mat_max_accum.cols; j++) {
+                sum += mat_max_accum.at<int>(i, j);
+            }
+        }
+
+        int average = sum / (mat_max_accum.rows + mat_max_accum.cols - 2);
+
         std::vector <cv::Mat> angles_accum_char(max_angle + 1);
+
+        if (max_accum.value * 3 < average) {
+            max_accum.value = -1;
+            return angles_accum_char;
+        }
 
         for (int angle = 0; angle <= max_angle; angle++) {
             angles_accum_char[angle] = int_to_char_global_max(angles_accum[angle], max_accum.value);
@@ -306,10 +333,24 @@ public:
 
         cv::Mat angles;
 
-        cv::Mat edges_char = find_edges(src, angles);
+        bool empty = false;
+        cv::Mat edges_char = find_edges(src, angles, empty);
+
+        CvMemStorage* seqMem = cvCreateMemStorage(0);
+        CvSeq* seq = cvCreateSeq(0, sizeof(CvSeq), sizeof(cv::RotatedRect), seqMem);
+
+        if (empty) {
+            return seq;
+        }
 
         AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
         std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
+
+
+
+        if (max_accum.value == -1) {
+            return seq;
+        }
 
         std::vector<Cell> points;
         points.push_back(max_accum.cell);
@@ -321,8 +362,6 @@ public:
                                                      Size2f(this->src_width, this->src_height),
                                                      max_accum.angle);
 
-        CvMemStorage* seqMem = cvCreateMemStorage(0);
-        CvSeq* seq = cvCreateSeq(0, sizeof(CvSeq), sizeof(cv::RotatedRect), seqMem);
         cvSeqPush(seq, rRect);
         return seq;
     }
@@ -336,9 +375,14 @@ cvHoughRect(InputArray src_image, int rect_height,
     return hr.recognize(src_image);
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     cv::Mat src = cv::imread(argv[1], 1);
     CvSeq* seq = cvHoughRect(src, 100, 300, 5, 5, 0, 180);
+
+    if (seq->total <= 0) {
+        return 0;
+    }
     cv::RotatedRect* res = (cv::RotatedRect*)cvGetSeqElem(seq, 0);
 
     Point2f vertices[4];
