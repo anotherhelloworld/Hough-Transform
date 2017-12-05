@@ -258,12 +258,13 @@ public:
         }
 
         int scaled_angle = max_accum.angle / hough_scale_angle;
-        if (scaled_angle < angles_accum.size()) {
-            
-        }
-        cv::Mat mat_max_accum = angles_accum[scaled_angle];
 
-//        double sum = cv::sum(mat_max_accum)[0];
+        if (scaled_angle > angles_accum.size()) {
+            std::vector <cv::Mat> angles_accum_char;
+            return angles_accum_char;
+        }
+
+        cv::Mat mat_max_accum = angles_accum[scaled_angle];
 
         int sum = 0;
 
@@ -345,8 +346,6 @@ public:
 
         AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
         std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
-
-
 
         if (max_accum.value == -1) {
             return seq;
