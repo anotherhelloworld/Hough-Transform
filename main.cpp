@@ -239,6 +239,8 @@ public:
     {
         int max_angle = (180 + 1) / hough_scale_angle;
         std::vector <cv::Mat> angles_accum(max_angle + 1);
+        std::vector <int> accum_counter(max_angle + 1);
+
         for (int i = 0; i <= max_angle; i ++) {
             angles_accum[i] = cv::Mat::zeros(image.rows / hough_scale,
                                              image.cols / hough_scale, CV_32SC1);
@@ -278,10 +280,10 @@ public:
 
         std::vector <cv::Mat> angles_accum_char(max_angle + 1);
 
-        if (max_accum.value * 3 < average) {
-            max_accum.value = -1;
-            return angles_accum_char;
-        }
+//        if (max_accum.value * 3 < average) {
+//            max_accum.value = -1;
+//            return angles_accum_char;
+//        }
 
         for (int angle = 0; angle <= max_angle; angle++) {
             angles_accum_char[angle] = int_to_char_global_max(angles_accum[angle], max_accum.value);
@@ -362,6 +364,15 @@ public:
                                                      max_accum.angle);
 
         cvSeqPush(seq, rRect);
+
+
+        cv::Mat C3;
+        int scaled_angle = max_accum.angle / hough_scale_angle;
+        resize(accum[scaled_angle], C3, cv::Size(accum[scaled_angle].cols * 5,
+                                                 accum[scaled_angle].rows * 5));
+        imshow("accum", C3);
+
+
         return seq;
     }
 };
@@ -377,7 +388,7 @@ cvHoughRect(InputArray src_image, int rect_height,
 int main(int argc, char* argv[])
 {
     cv::Mat src = cv::imread(argv[1], 1);
-    CvSeq* seq = cvHoughRect(src, 100, 300, 5, 5, 0, 180);
+    CvSeq* seq = cvHoughRect(src, 240, 330, 5, 5, 0, 180);
 
     if (seq->total <= 0) {
         return 0;
@@ -387,7 +398,7 @@ int main(int argc, char* argv[])
     Point2f vertices[4];
     res->points(vertices);
     for (int i = 0; i < 4; i++) {
-        line(src, vertices[i], vertices[(i + 1) % 4], Scalar(0, 0, 255), 2);
+        line(src, vertices[i], vertices[(i + 1) % 4], Scalar(0, 255, 0), 2);
     }
     std::string name = "ans" + std::string(argv[1]);
 
