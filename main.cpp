@@ -270,8 +270,10 @@ public:
 //                              max_accum, angles.at<int>(row, col), hough_height, k, row, col);
 //                run_rectangle(image, angles_accum, accum_counter, hough_scale, hough_scale_angle,
 //                              max_accum, angles.at<int>(row, col) - 90, hough_height, k, row, col);
-                 run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                run_rectangle(image, accums, hough_scale, hough_scale_angle,
                               max_accum, angles.at<int>(row, col), hough_height, k, row, col);
+                run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                              max_accum, angles.at<int>(row, col) - 90, hough_height, k, row, col);
 
             }
         }
@@ -293,6 +295,7 @@ public:
 //        }
 //
 //        int average = sum / (mat_max_accum.rows + mat_max_accum.cols - 2);
+        sort(accums.begin(), accums.end());
 
         std::vector <cv::Mat> angles_accum_char(max_angle + 1);
 
@@ -363,6 +366,7 @@ public:
         }
 
         AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
+
         std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
 
         if (max_accum.value == -1) {
