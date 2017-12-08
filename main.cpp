@@ -43,16 +43,18 @@ public:
             , hough_width(hough_width)
             , hough_scale(hough_scale)
             , hough_scale_angle(hough_scale_angle)
-    {
-    }
+    {};
 
     struct Cell
     {
         int row;
         int col;
-        Cell(int row = -1, int col = -1)
-                : row(row)
-                , col(col)
+        Cell(
+            int row = -1,
+            int col = -1
+            )
+            : row(row)
+            , col(col)
         {};
     };
 
@@ -62,12 +64,20 @@ public:
         int angle;
         Cell cell;
         AccumPoint(
-                int value,
-                Cell cell)
-                : value(value)
-                , cell(cell)
+            int value,
+            Cell cell
+            )
+            : value(value)
+            , cell(cell)
         {};
         bool operator < (const AccumPoint& r) const { return value > r.value; }
+    };
+
+    struct Accum
+    {
+        int counter = 0;
+        cv::Mat accum;
+        bool operator < (const Accum& r) const { return counter > r.counter; }
     };
 
     cv::Mat normalize_mat(const cv::Mat& mat, int _max)
@@ -166,7 +176,7 @@ public:
 
     void run_along_line(
             const cv::Mat& image,
-            std::vector <cv::Mat>& accum,
+            std::vector <Accum>& accum,
             Cell start,
             Cell finish,
             int scale,
@@ -183,9 +193,10 @@ public:
             Cell p = Cell(floor(start.row + (finish.row - start.row) * i),
                           floor(start.col + (finish.col - start.col) * i));
             if (p.row < image.rows && p.row > 0 && p.col < image.cols && p.col > 0) {
-                accum[angleScaled].at<int>(p.row / scale, p.col / scale)++;
-                if (accum[angleScaled].at<int>(p.row / scale, p.col / scale) > max_accum.value) {
-                    max_accum.value = accum[angleScaled].at<int>(p.row / scale, p.col / scale);
+                accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale)++;
+                accum[angleScaled].counter++;
+                if (accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale) > max_accum.value) {
+                    max_accum.value = accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale);
                     max_accum.cell.row = p.row / scale;
                     max_accum.cell.col = p.col / scale;
                     max_accum.angle = angle;///?
@@ -196,7 +207,9 @@ public:
 
     void run_rectangle(
             const cv::Mat& image,
-            std::vector <cv::Mat>& accum,
+//            std::vector <cv::Mat>& accum,
+//            std::vector <int>& accum_counter,
+            std::vector<Accum>& accum,
             int scale,
             int scale_angle,
             AccumPoint& max_accum,
@@ -238,11 +251,12 @@ public:
             AccumPoint& max_accum)
     {
         int max_angle = (180 + 1) / hough_scale_angle;
-        std::vector <cv::Mat> angles_accum(max_angle + 1);
-        std::vector <int> accum_counter(max_angle + 1);
+//        std::vector <cv::Mat> angles_accum(max_angle + 1);
+//        std::vector <int> accum_counter(max_angle + 1);
+        std::vector <Accum> accums(max_angle + 1);
 
         for (int i = 0; i <= max_angle; i ++) {
-            angles_accum[i] = cv::Mat::zeros(image.rows / hough_scale,
+            accums[i].accum = cv::Mat::zeros(image.rows / hough_scale,
                                              image.cols / hough_scale, CV_32SC1);
         }
 
@@ -252,31 +266,33 @@ public:
                 if (edges_char.at<uchar>(row, col) == 0) {
                     continue;
                 }
-                run_rectangle(image, angles_accum, hough_scale, hough_scale_angle,
+//                run_rectangle(image, angles_accum, accum_counter, hough_scale, hough_scale_angle,
+//                              max_accum, angles.at<int>(row, col), hough_height, k, row, col);
+//                run_rectangle(image, angles_accum, accum_counter, hough_scale, hough_scale_angle,
+//                              max_accum, angles.at<int>(row, col) - 90, hough_height, k, row, col);
+                 run_rectangle(image, accums, hough_scale, hough_scale_angle,
                               max_accum, angles.at<int>(row, col), hough_height, k, row, col);
-                run_rectangle(image, angles_accum, hough_scale, hough_scale_angle,
-                              max_accum, angles.at<int>(row, col) - 90, hough_height, k, row, col);
+
             }
         }
 
         int scaled_angle = max_accum.angle / hough_scale_angle;
 
-        if (scaled_angle > angles_accum.size()) {
+        if (scaled_angle > accums.size()) {
             std::vector <cv::Mat> angles_accum_char;
             return angles_accum_char;
         }
-
-        cv::Mat mat_max_accum = angles_accum[scaled_angle];
-
-        int sum = 0;
-
-        for (int i = 0; i < mat_max_accum.rows; i++) {
-            for (int j = 0; j < mat_max_accum.cols; j++) {
-                sum += mat_max_accum.at<int>(i, j);
-            }
-        }
-
-        int average = sum / (mat_max_accum.rows + mat_max_accum.cols - 2);
+//        cv::Mat mat_max_accum = accum[scaled_angle].accum;
+//
+//        int sum = 0;
+//
+//        for (int i = 0; i < mat_max_accum.rows; i++) {
+//            for (int j = 0; j < mat_max_accum.cols; j++) {
+//                sum += mat_max_accum.at<int>(i, j);
+//            }
+//        }
+//
+//        int average = sum / (mat_max_accum.rows + mat_max_accum.cols - 2);
 
         std::vector <cv::Mat> angles_accum_char(max_angle + 1);
 
@@ -286,7 +302,7 @@ public:
 //        }
 
         for (int angle = 0; angle <= max_angle; angle++) {
-            angles_accum_char[angle] = int_to_char_global_max(angles_accum[angle], max_accum.value);
+            angles_accum_char[angle] = int_to_char_global_max(accums[angle].accum, max_accum.value);
         }
 
         return angles_accum_char;
@@ -388,7 +404,7 @@ cvHoughRect(InputArray src_image, int rect_height,
 int main(int argc, char* argv[])
 {
     cv::Mat src = cv::imread(argv[1], 1);
-    CvSeq* seq = cvHoughRect(src, 240, 330, 5, 5, 0, 180);
+    CvSeq* seq = cvHoughRect(src, 300, 100, 5, 5, 0, 180);
 
     if (seq->total <= 0) {
         return 0;
