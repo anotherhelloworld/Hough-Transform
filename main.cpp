@@ -60,12 +60,12 @@ public:
 
     struct AccumPoint
     {
-        int value;
-        int angle;
+        int value = 0;
+        int angle = 0;
         Cell cell;
         AccumPoint(
-            int value,
-            Cell cell
+            int value = 0,
+            Cell cell = Cell(-1, -1)
             )
             : value(value)
             , cell(cell)
@@ -75,8 +75,14 @@ public:
 
     struct Accum
     {
-        int counter = 0;
+        int counter;
         cv::Mat accum;
+        std::vector<AccumPoint> local_max;
+        Accum(
+            int counter = 0
+            )
+            : counter(counter)
+        {};
         bool operator < (const Accum& r) const { return counter > r.counter; }
     };
 
