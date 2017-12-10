@@ -113,6 +113,39 @@ public:
         return normalize_mat(mat, _max);
     }
 
+    std::set <AccumPoint> findLocalMax(const std::vector<Accum>& accums, int windowSize)
+    {
+        std::set <AccumPoint> res;
+        for (auto& accum: accums) {
+            assert(windowSize <= accum.accum.rows);
+            assert(windowSize <= accum.accum.cols);
+
+            for (int i = windowSize; i <= accum.accum.rows - windowSize; i += 1) {
+                for (int j = windowSize; j <= accum.accum.cols - windowSize; j += 1) {
+                    Rect roi(j - windowSize, i - windowSize, windowSize * 2, windowSize * 2);
+
+                    Mat roiMat = accum.accum(roi);
+
+                    double _min, _max;
+                    Point minLoc, maxLoc;
+                    minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
+
+                    for (int k = i - windowSize; k < i + windowSize; k++) {
+                        for (int l = j - windowSize; l < j + windowSize; l++) {
+                            if ((maxLoc.x + (j - windowSize) == l) && (maxLoc.y + (i - windowSize) == k)) {
+                                if (accum.accum.at<uchar>(k, l) > 0) {
+                                    res.emplace(k, l);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return res;
+    }
+
     cv::Mat find_edges(const cv::Mat& mat, cv::Mat& angles, bool& empty)
     {
         cv::Mat delta_i = cv::Mat::zeros(mat.rows - 1, mat.cols - 1, CV_32SC1);
