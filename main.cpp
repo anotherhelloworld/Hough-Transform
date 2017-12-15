@@ -116,33 +116,30 @@ public:
     std::set <AccumPoint> findLocalMax(const std::vector<Accum>& accums, int windowSize)
     {
         std::set <AccumPoint> res;
-        for (auto& accum: accums) {
-            assert(windowSize <= accum.accum.rows);
-            assert(windowSize <= accum.accum.cols);
+        for (int i = 0; i < accums.size() * 5 / 10; i++) {
+            assert(windowSize <= accums[i].accum.rows);
+            assert(windowSize <= accums[i].accum.cols);
 
-            for (int i = windowSize; i <= accum.accum.rows - windowSize; i += 1) {
-                for (int j = windowSize; j <= accum.accum.cols - windowSize; j += 1) {
-                    Rect roi(j - windowSize, i - windowSize, windowSize * 2, windowSize * 2);
+            for (int row = 0; i < accums[i].accum.rows; row += windowSize) {
+                for (int col = windowSize; j <= accums[i].accum.cols; col += windowSize) {
+                    int rect_size = ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows : row + windowSize)
 
-                    Mat roiMat = accum.accum(roi);
+                    Rect roi(
+                        col, 
+                        row, 
+                        ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows : row + windowSize), 
+                        ((col + windowSize) > accums[i].accum.cols ? accums[i].accum.cols : col + windowSize));
+
+                    Mat roiMat = accums[i].accum(roi);
 
                     double _min, _max;
                     Point minLoc, maxLoc;
                     minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
 
-                    for (int k = i - windowSize; k < i + windowSize; k++) {
-                        for (int l = j - windowSize; l < j + windowSize; l++) {
-                            if ((maxLoc.x + (j - windowSize) == l) && (maxLoc.y + (i - windowSize) == k)) {
-                                if (accum.accum.at<uchar>(k, l) > 0) {
-                                    res.emplace(k, l);
-                                }
-                            }
-                        }
-                    }
+                    roiMat.at<int>(maxLoc.x, maxLoc.y)
                 }
             }
         }
-
         return res;
     }
 
@@ -335,6 +332,8 @@ public:
 //
 //        int average = sum / (mat_max_accum.rows + mat_max_accum.cols - 2);
         sort(accums.begin(), accums.end());
+
+        findLocalMax(accums)
 
         std::vector <cv::Mat> angles_accum_char(max_angle + 1);
 
