@@ -62,12 +62,15 @@ public:
     {
         int value = 0;
         int angle = 0;
+        //int angle_scaled = 0;
         Cell cell;
         AccumPoint(
             int value = 0,
+            int angle = 0,
             Cell cell = Cell(-1, -1)
             )
             : value(value)
+            , angle(angle)
             , cell(cell)
         {};
         bool operator < (const AccumPoint& r) const { return value > r.value; }
@@ -76,6 +79,7 @@ public:
     struct Accum
     {
         int counter;
+        int angle_scaled;
         cv::Mat accum;
         std::vector<AccumPoint> local_max;
         Accum(
@@ -113,22 +117,22 @@ public:
         return normalize_mat(mat, _max);
     }
 
-    std::set <AccumPoint> findLocalMax(const std::vector<Accum>& accums, int windowSize)
+    std::set <AccumPoint> find_local_max(const std::vector<Accum>& accums, int windowSize, AccumPoint& max, int scale_angle)
     {
         std::set <AccumPoint> res;
         for (int i = 0; i < accums.size() * 5 / 10; i++) {
             assert(windowSize <= accums[i].accum.rows);
             assert(windowSize <= accums[i].accum.cols);
 
-            for (int row = 0; i < accums[i].accum.rows; row += windowSize) {
-                for (int col = windowSize; j <= accums[i].accum.cols; col += windowSize) {
-                    int rect_size = ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows : row + windowSize)
+            for (int row = 0; row < accums[i].accum.rows; row += windowSize) {
+                for (int col = windowSize; col <= accums[i].accum.cols; col += windowSize) {
+                    int rect_size = ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows : row + windowSize);
 
                     Rect roi(
-                        col, 
-                        row, 
-                        ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows : row + windowSize), 
-                        ((col + windowSize) > accums[i].accum.cols ? accums[i].accum.cols : col + windowSize));
+                        col,
+                        row,
+                        ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows - row : windowSize),
+                        ((col + windowSize) > accums[i].accum.cols ? accums[i].accum.cols - col : windowSize));
 
                     Mat roiMat = accums[i].accum(roi);
 
@@ -136,7 +140,12 @@ public:
                     Point minLoc, maxLoc;
                     minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
 
-                    roiMat.at<int>(maxLoc.x, maxLoc.y)
+                    if ((max.value / 2 < roiMat.at<int>(maxLoc.x, maxLoc.y))
+                        && ((max.cell.row - maxLoc.y > windowSize)
+                            || (max.cell.col - maxLoc.x > windowSize)
+                            || (max.angle - accums[i].angle_scaled * scale_angle > 15))) {
+                        res.emplace(0, accums[i].angle_scaled * scale_angle, Cell(maxLoc.y, maxLoc.x));
+                    }
                 }
             }
         }
@@ -165,7 +174,7 @@ public:
                 int alpha_grad = (alpha * 180.0) / CV_PI;
                 angles.at<int>(i, j) = alpha_grad;
                 delta_i.at<int>(i, j) = laplas;
-                filtering.push_back(AccumPoint(laplas, Cell(i, j)));
+                filtering.push_back(AccumPoint(laplas, 0, Cell(i, j)));
             }
         }
 
@@ -236,6 +245,7 @@ public:
                     max_accum.cell.row = p.row / scale;
                     max_accum.cell.col = p.col / scale;
                     max_accum.angle = angle;///?
+                    //max_accum.angle_scaled = angleScaled;
                 }
             }
         }
@@ -294,6 +304,7 @@ public:
         for (int i = 0; i <= max_angle; i ++) {
             accums[i].accum = cv::Mat::zeros(image.rows / hough_scale,
                                              image.cols / hough_scale, CV_32SC1);
+            accums[i].angle_scaled = i;
         }
 
         double k = ((double)hough_width / (double)hough_height);
@@ -333,7 +344,7 @@ public:
 //        int average = sum / (mat_max_accum.rows + mat_max_accum.cols - 2);
         sort(accums.begin(), accums.end());
 
-        findLocalMax(accums)
+        find_local_max(accums, 5, max_accum, hough_scale_angle);
 
         std::vector <cv::Mat> angles_accum_char(max_angle + 1);
 
@@ -403,7 +414,7 @@ public:
             return seq;
         }
 
-        AccumPoint max_accum = AccumPoint(-1, Cell(-1, -1));
+        AccumPoint max_accum = AccumPoint(-1, 0, Cell(-1, -1));
 
         std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
 
