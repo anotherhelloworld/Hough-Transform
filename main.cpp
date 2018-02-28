@@ -16,8 +16,6 @@
 
 #include <opencv2/opencv.hpp>
 
-using namespace cv;
-
 class HoughLaneRecognizer
 {
 public:
@@ -124,20 +122,21 @@ public:
             assert(windowSize <= accums[i].accum.rows);
             assert(windowSize <= accums[i].accum.cols);
 
-            for (int row = 0; row < accums[i].accum.rows; row += windowSize) {
-                for (int col = windowSize; col <= accums[i].accum.cols; col += windowSize) {
-                    int rect_size = ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows : row + windowSize);
+            for (int row = 0; row < accums[i].accum.rows - windowSize; row += windowSize) {
+                for (int col = windowSize; col <= accums[i].accum.cols - windowSize; col += windowSize) {
 
-                    Rect roi(
+                    std::cout << row << " " << col << std::endl;
+
+                    cv::Rect roi(
                         col,
                         row,
                         ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows - row : windowSize),
                         ((col + windowSize) > accums[i].accum.cols ? accums[i].accum.cols - col : windowSize));
 
-                    Mat roiMat = accums[i].accum(roi);
+                    cv::Mat roiMat = accums[i].accum(roi);
 
                     double _min, _max;
-                    Point minLoc, maxLoc;
+                    cv::Point minLoc, maxLoc;
                     minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
 
                     if ((max.value / 2 < roiMat.at<int>(maxLoc.x, maxLoc.y))
@@ -394,7 +393,7 @@ public:
         return res;
     }
 
-    CvSeq* recognize(InputArray _src)
+    CvSeq* recognize(cv::InputArray _src)
     {
         cv::Mat src;
         cv::Mat image;
@@ -428,8 +427,8 @@ public:
         points[0].col = points[0].col * this->hough_scale + this->hough_scale / 2;
         points[0].row = points[0].row * this->hough_scale + this->hough_scale / 2;
 
-        cv::RotatedRect* rRect = new cv::RotatedRect(Point2f(points[0].col, points[0].row),
-                                                     Size2f(this->src_width, this->src_height),
+        cv::RotatedRect* rRect = new cv::RotatedRect(cv::Point2f(points[0].col, points[0].row),
+                                                     cv::Size2f(this->src_width, this->src_height),
                                                      max_accum.angle);
 
         cvSeqPush(seq, rRect);
@@ -447,7 +446,7 @@ public:
 };
 
 CV_IMPL CvSeq*
-cvHoughRect(InputArray src_image, int rect_height,
+cvHoughRect(cv::InputArray src_image, int rect_height,
             int rect_width, int accum_scale, int angle_scale, int min_angle, int max_angle)
 {
     HoughLaneRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale);
@@ -464,15 +463,15 @@ int main(int argc, char* argv[])
     }
     cv::RotatedRect* res = (cv::RotatedRect*)cvGetSeqElem(seq, 0);
 
-    Point2f vertices[4];
+    cv::Point2f vertices[4];
     res->points(vertices);
     for (int i = 0; i < 4; i++) {
-        line(src, vertices[i], vertices[(i + 1) % 4], Scalar(0, 255, 0), 2);
+        line(src, vertices[i], vertices[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
     }
     std::string name = "ans" + std::string(argv[1]);
 
     imshow(name, src);
 //    imwrite(name, src);
-    waitKey(0);
+    cv::waitKey(0);
     return 0;
 }
