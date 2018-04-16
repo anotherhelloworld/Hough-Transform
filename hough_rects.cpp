@@ -371,27 +371,11 @@ public:
         }
     }
 
-    cv::Mat hsv_filter(const cv::Mat& img, const cv::Mat& hsv_distr)
-    {
-        cv::Mat hsv_img;
-        cv::cvtColor(img, hsv_img, CV_BGR2HSV);
-        cv::Mat res = cv::Mat::zeros(hsv_img.rows, hsv_img.cols, CV_8U);
-        for (int i = 0; i < hsv_img.rows; i++) {
-            for (int j = 0; j < hsv_img.cols; j++) {
-                cv::Vec3b hsv = hsv_img.at<cv::Vec3b>(i, j);
-                res.at<uchar>(i, j) = hsv_distr.at<uchar>(hsv[0], hsv[1]);
-            }
-        }
-        return res;
-    }
-
-    void recognize(cv::InputArray _src, std::vector<cv::RotatedRect>& rects)
+    void recognize(cv::InputArray _src, std::vector<cv::Vec6d>& rects)
     {
         cv::Mat src;
+        _src.copyTo(src);
         cv::Mat image;
-        cv::GaussianBlur(_src, src, cv::Size(3,3), 0, 0, cv::BORDER_DEFAULT);
-
-        cv::cvtColor(src, src, CV_BGR2GRAY);
 
         cv::Mat angles;
 
@@ -420,9 +404,13 @@ public:
         points[0].col = points[0].col * this->hough_scale + this->hough_scale / 2;
         points[0].row = points[0].row * this->hough_scale + this->hough_scale / 2;
 
-        cv::RotatedRect rRect(cv::Point2f(points[0].col, points[0].row),
-                                    cv::Size2f(this->src_width, this->src_height),
-                                    max_accum.angle);
+        // cv::RotatedRect rRect(cv::Point2f(points[0].col, points[0].row),
+        //                             cv::Size2f(this->src_width, this->src_height),
+        //                             max_accum.angle);
+
+        cv::Vec6f rRect(points[0].col, points[0].row,
+                        this->src_width, this->src_height,
+                        max_accum.angle, 0);
 
         // cvSeqPush(seq, rRect);
        rects.push_back(rRect);
@@ -437,23 +425,29 @@ public:
     }
 };
 
-void HoughRects(InputArray src_image, OutputArray _output, int rect_height,
+void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rect_height,
             int rect_width, int accum_scale, int angle_scale)
 {
     HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale);
-    std::vector<cv::RotatedRect> rects;
+    std::vector<cv::Vec6d> rects;
     hr.recognize(src_image, rects);
-    // tmp->copyTo(output);
-    _output.create(rects.size(), 5, CV_32FC1);
-    cv::Mat _rects(rects.size(), 5, CV_32S);
-    for (size_t i = 0; i < rects.size(); i++) {
-            _rects.at<int>(i, 0) = rects[i].center.x;
-            _rects.at<int>(i, 1) = rects[i].center.y;
-            _rects.at<int>(i, 2) = rects[i].angle;
-            _rects.at<int>(i, 3) = rects[i].size.width;
-            _rects.at<int>(i, 4) = rects[i].size.height;
+    if (rects.size() > 0) {
+        _output.create(rects.size(), 6, CV_32FC1);
+        Mat(1, rects.size(), CV_32SC1, &rects[0]).copyTo(_output.getMat());
     }
-    _rects.copyTo(_output);
+    return;
+    // Mat(1, rects.size(), CV_32SC6, &rects[0]);
+    // tmp->copyTo(output);
+    // _output.create(rects.size(), 5, CV_32FC1);
+    // cv::Mat _rects(rects.size(), 5, CV_32S);
+    // for (size_t i = 0; i < rects.size(); i++) {
+    //         _rects.at<int>(i, 0) = rects[i].center.x;
+    //         _rects.at<int>(i, 1) = rects[i].center.y;
+    //         _rects.at<int>(i, 2) = rects[i].angle;
+    //         _rects.at<int>(i, 3) = rects[i].size.width;
+    //         _rects.at<int>(i, 4) = rects[i].size.height;
+    // }
+    // _rects.copyTo(_output);
 }
 
 // CV_IMPL CvSeq*

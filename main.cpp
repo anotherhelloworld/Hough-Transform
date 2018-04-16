@@ -5,6 +5,14 @@
 using namespace cv;
 using namespace std;
 
+void drawTestRect(Mat& image, Point2f center, Size2f size, int angle) {
+    RotatedRect rRect = RotatedRect(center, size, angle);
+    Point2f vertices[4];
+    rRect.points(vertices);
+    for (int i = 0; i < 4; i++)
+        line(image, vertices[i], vertices[(i+1)%4], Scalar(0 , 0, 0), 3);
+}
+
 int main(int argc, char** argv)
 {
 //    Mat img, gray;
@@ -36,13 +44,10 @@ int main(int argc, char** argv)
     if( argc != 2 || !(img=imread(argv[1], 1)).data)
         return -1;
     cvtColor(img, gray, COLOR_BGR2GRAY);
-    // smooth it, otherwise a lot of false circles may be detected
-    GaussianBlur( gray, gray, Size(9, 9), 2, 2 );
-    vector<Vec3f> rects;
+    GaussianBlur(gray, gray, Size(9, 9), 2, 2 );
+    vector<Vec6f> rects;
 
     HoughRects(gray, rects, 100, 300, 5, 5);
-
-
 
     return 0;
 }
