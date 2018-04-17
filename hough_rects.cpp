@@ -371,7 +371,7 @@ public:
         }
     }
 
-    void recognize(cv::InputArray _src, std::vector<cv::Vec6d>& rects)
+    void recognize(cv::InputArray _src, std::vector<cv::Vec6f>& rects)
     {
         cv::Mat src;
         _src.copyTo(src);
@@ -429,25 +429,34 @@ void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rect_heig
             int rect_width, int accum_scale, int angle_scale)
 {
     HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale);
-    std::vector<cv::Vec6d> rects;
+    std::vector<cv::Vec6f> rects;
     hr.recognize(src_image, rects);
-    if (rects.size() > 0) {
-        _output.create(rects.size(), 6, CV_32FC1);
-        Mat(1, rects.size(), CV_32SC1, &rects[0]).copyTo(_output.getMat());
-    }
-    return;
-    // Mat(1, rects.size(), CV_32SC6, &rects[0]);
-    // tmp->copyTo(output);
-    // _output.create(rects.size(), 5, CV_32FC1);
-    // cv::Mat _rects(rects.size(), 5, CV_32S);
+
+    // _output.create(rects.size(), 6, CV_32FC1);
+    // cv::Mat _rects(rects.size(), 6, CV_32FC1);
     // for (size_t i = 0; i < rects.size(); i++) {
     //         _rects.at<int>(i, 0) = rects[i].center.x;
     //         _rects.at<int>(i, 1) = rects[i].center.y;
     //         _rects.at<int>(i, 2) = rects[i].angle;
     //         _rects.at<int>(i, 3) = rects[i].size.width;
     //         _rects.at<int>(i, 4) = rects[i].size.height;
+    //         _rects.at<int>(i, 5) = 0;
     // }
     // _rects.copyTo(_output);
+
+    int rows = (int)rects.size();
+    cv::Mat _rects(rows, 6, CV_32FC1);
+    for (int i = 0; i < rects.size(); i++) {
+        for (int j = 0; j < 6; j++) {
+            _rects.at<float>(i, j) = rects[i][j];
+        }
+    }
+
+    if (rows > 0) {
+        _output.create(rows, 6, CV_32FC1);
+        _output.assign(_rects);
+    }
+    return;
 }
 
 // CV_IMPL CvSeq*
