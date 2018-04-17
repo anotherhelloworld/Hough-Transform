@@ -46,7 +46,6 @@ public:
     {
         int value;
         int angle;
-        //int angle_scaled = 0;
         Cell cell;
         AccumPoint(
             int value = 0,
@@ -101,42 +100,6 @@ public:
         return normalize_mat(mat, _max);
     }
 
-    // std::set <AccumPoint> find_local_max(const std::vector<Accum>& accums, int windowSize, AccumPoint& max_accum, int scale_angle)
-    // {
-    //     std::set <AccumPoint> res;
-    //     for (int i = 0; i < accums.size() * 5 / 10; i++) {
-    //         assert(windowSize <= accums[i].accum.rows);
-    //         assert(windowSize <= accums[i].accum.cols);
-
-    //         for (int row = 0; row < accums[i].accum.rows - windowSize; row += windowSize) {
-    //             for (int col = windowSize; col <= accums[i].accum.cols - windowSize; col += windowSize) {
-
-    //                 // std::cout << row << " " << col << std::endl;
-
-    //                 cv::Rect roi(
-    //                     col,
-    //                     row,
-    //                     ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows - row : windowSize),
-    //                     ((col + windowSize) > accums[i].accum.cols ? accums[i].accum.cols - col : windowSize));
-
-    //                 cv::Mat roiMat = accums[i].accum(roi);
-
-    //                 double _min, _max;
-    //                 cv::Point minLoc, maxLoc;
-    //                 minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
-
-    //                 if ((max_accum.value / 2 < roiMat.at<int>(maxLoc.x, maxLoc.y))
-    //                     && ((max_accum.cell.row - maxLoc.y > windowSize)
-    //                         || (max_accum.cell.col - maxLoc.x > windowSize)
-    //                         || (max_accum.angle - accums[i].angle_scaled * scale_angle > 15))) {
-    //                     res.emplace(0, accums[i].angle_scaled * scale_angle, Cell(maxLoc.y, maxLoc.x));
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     return res;
-    // }
-
     cv::Mat find_edges(const cv::Mat& mat, cv::Mat& angles, bool& empty)
     {
         cv::Mat delta_i = cv::Mat::zeros(mat.rows - 1, mat.cols - 1, CV_32SC1);
@@ -172,10 +135,6 @@ public:
         }
 
         cv::Mat edges = cv::Mat::zeros(delta_i.rows, delta_i.cols, CV_32SC1);
-
-        // for (auto &point: filtered) {
-        //     edges.at<int>(point.cell.row, point.cell.col) = point.value;
-        // }
 
         for (size_t i = 0; i < filtered.size(); i++) {
             edges.at<int>(filtered[i].cell.row, filtered[i].cell.col) = filtered[i].value;
@@ -233,8 +192,7 @@ public:
                     max_accum.value = accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale);
                     max_accum.cell.row = p.row / scale;
                     max_accum.cell.col = p.col / scale;
-                    max_accum.angle = angle;///?
-                    //max_accum.angle_scaled = angleScaled;
+                    max_accum.angle = angle;//?
                 }
             }
         }
@@ -242,8 +200,6 @@ public:
 
     void run_rectangle(
             const cv::Mat& image,
-//            std::vector <cv::Mat>& accum,
-//            std::vector <int>& accum_counter,
             std::vector<Accum>& accum,
             int scale,
             int scale_angle,
@@ -270,7 +226,6 @@ public:
 
 
                 Cell rect_coords[4] = { ptl, ptr, pbr, pbl };
-                // std::array<Cell, 4> rect_coords = { ptl, ptr, pbr, pbl };
                 std::vector <Cell> rotate_coords = rotate_rect(rect_coords, Cell(row, col), angle);
 
                 run_along_line(image, accum, rotate_coords[0], rotate_coords[1], scale, scale_angle, max_accum, angle);
@@ -288,8 +243,6 @@ public:
             AccumPoint& max_accum)
     {
         int max_angle = (180 + 1) / hough_scale_angle;
-//        std::vector <cv::Mat> angles_accum(max_angle + 1);
-//        std::vector <int> accum_counter(max_angle + 1);
         std::vector <Accum> accums(max_angle + 1);
 
         for (int i = 0; i <= max_angle; i ++) {
@@ -304,10 +257,6 @@ public:
                 if (edges_char.at<uchar>(row, col) == 0) {
                     continue;
                 }
-//                run_rectangle(image, angles_accum, accum_counter, hough_scale, hough_scale_angle,
-//                              max_accum, angles.at<int>(row, col), hough_height, k, row, col);
-//                run_rectangle(image, angles_accum, accum_counter, hough_scale, hough_scale_angle,
-//                              max_accum, angles.at<int>(row, col) - 90, hough_height, k, row, col);
                 run_rectangle(image, accums, hough_scale, hough_scale_angle,
                               max_accum, angles.at<int>(row, col), hough_height, k, row, col);
                 run_rectangle(image, accums, hough_scale, hough_scale_angle,
@@ -322,27 +271,9 @@ public:
             std::vector <cv::Mat> angles_accum_char;
             return angles_accum_char;
         }
-//        cv::Mat mat_max_accum = accum[scaled_angle].accum;
-//
-//        int sum = 0;
-//
-//        for (int i = 0; i < mat_max_accum.rows; i++) {
-//            for (int j = 0; j < mat_max_accum.cols; j++) {
-//                sum += mat_max_accum.at<int>(i, j);
-//            }
-//        }
-//
-//        int average = sum / (mat_max_accum.rows + mat_max_accum.cols - 2);
         sort(accums.begin(), accums.end());
 
-        // find_local_max(accums, 5, max_accum, hough_scale_angle);
-
         std::vector <cv::Mat> angles_accum_char(max_angle + 1);
-
-//        if (max_accum.value * 3 < average) {
-//            max_accum.value = -1;
-//            return angles_accum_char;
-//        }
 
         for (int angle = 0; angle <= max_angle; angle++) {
             angles_accum_char[angle] = int_to_char_global_max(accums[angle].accum, max_accum.value);
@@ -382,10 +313,6 @@ public:
         bool empty = false;
         cv::Mat edges_char = find_edges(src, angles, empty);
 
-        // CvMemStorage* seqMem = cvCreateMemStorage(0);
-
-        // CvSeq* seq = cvCreateSeq(0, sizeof(CvSeq), sizeof(cv::RotatedRect), seqMem);
-
         if (empty) {
             return;
         }
@@ -404,22 +331,16 @@ public:
         points[0].col = points[0].col * this->hough_scale + this->hough_scale / 2;
         points[0].row = points[0].row * this->hough_scale + this->hough_scale / 2;
 
-        // cv::RotatedRect rRect(cv::Point2f(points[0].col, points[0].row),
-        //                             cv::Size2f(this->src_width, this->src_height),
-        //                             max_accum.angle);
-
         cv::Vec6f rRect(points[0].col, points[0].row,
                         this->src_width, this->src_height,
                         max_accum.angle, 0);
 
-        // cvSeqPush(seq, rRect);
        rects.push_back(rRect);
 
         cv::Mat C3;
         int scaled_angle = max_accum.angle / hough_scale_angle;
         resize(accum[scaled_angle], C3, cv::Size(accum[scaled_angle].cols * 5,
                                                  accum[scaled_angle].rows * 5));
-        // imshow("accum", C3);
 
         return;
     }
@@ -431,18 +352,6 @@ void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rect_heig
     HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale);
     std::vector<cv::Vec6f> rects;
     hr.recognize(src_image, rects);
-
-    // _output.create(rects.size(), 6, CV_32FC1);
-    // cv::Mat _rects(rects.size(), 6, CV_32FC1);
-    // for (size_t i = 0; i < rects.size(); i++) {
-    //         _rects.at<int>(i, 0) = rects[i].center.x;
-    //         _rects.at<int>(i, 1) = rects[i].center.y;
-    //         _rects.at<int>(i, 2) = rects[i].angle;
-    //         _rects.at<int>(i, 3) = rects[i].size.width;
-    //         _rects.at<int>(i, 4) = rects[i].size.height;
-    //         _rects.at<int>(i, 5) = 0;
-    // }
-    // _rects.copyTo(_output);
 
     int rows = (int)rects.size();
     cv::Mat _rects(rows, 6, CV_32FC1);
