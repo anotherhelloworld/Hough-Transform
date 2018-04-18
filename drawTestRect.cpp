@@ -34,9 +34,11 @@ int main() {
 //    drawTestRect(image, Point2f(1000 / 2 - 200, 600 / 2), Size2f(300, 100), 0);
 //    drawTestRect(image, Point2f(1000 / 2 + 200, 600 / 2), Size2f(300, 100), 57);
 
-    Mat image(300, 400, CV_8U, Scalar(0));
-    image.setTo(Scalar(255 ,255, 255));
-    circle(image, Point2f(200, 200), 80, Scalar(0 , 0, 0), 3);
+    // Mat image(300, 400, CV_8U, Scalar(0));
+    // image.setTo(Scalar(255 ,255, 255));
+    // circle(image, Point2f(200, 200), 80, Scalar(0 , 0, 0), 3);
+
+
 
     imwrite("circleTest.png", image);
 }

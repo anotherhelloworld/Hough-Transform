@@ -1,6 +1,56 @@
 /****************************************************************************************\
 *                                     Rect Detection                                     *
 \****************************************************************************************/
+struct Cell
+{
+    int row;
+    int col;
+    Cell(
+        int row = -1,
+        int col = -1
+        )
+        : row(row)
+        , col(col)
+    {};
+};
+
+struct AccumPoint
+{
+    int value;
+    int angle;
+    Cell cell;
+    AccumPoint(
+        int value = 0,
+        int angle = 0,
+        Cell cell = Cell(-1, -1)
+        )
+        : value(value)
+        , angle(angle)
+        , cell(cell)
+    {};
+    bool operator < (const AccumPoint& r) const { return value > r.value; }
+};
+
+double get_distance(Cell& c1, Cell& c2)
+{
+    return (c2.row - c1.row) * (c2.row - c1.row) + (c2.col - c1.col) * (c2.col - c1.col);
+}
+
+struct Accum
+{
+    int counter;
+    int angle_scaled;
+    cv::Mat accum;
+    std::vector<AccumPoint> local_max;
+    Accum(
+        int counter = 0
+        )
+        : counter(counter)
+    {};
+    bool operator < (const Accum& r) const { return counter > r.counter; }
+};
+
+
 
 class HoughRectRecognizer
 {
@@ -28,50 +78,6 @@ public:
             , hough_scale(hough_scale)
             , hough_scale_angle(hough_scale_angle)
     {};
-
-    struct Cell
-    {
-        int row;
-        int col;
-        Cell(
-            int row = -1,
-            int col = -1
-            )
-            : row(row)
-            , col(col)
-        {};
-    };
-
-    struct AccumPoint
-    {
-        int value;
-        int angle;
-        Cell cell;
-        AccumPoint(
-            int value = 0,
-            int angle = 0,
-            Cell cell = Cell(-1, -1)
-            )
-            : value(value)
-            , angle(angle)
-            , cell(cell)
-        {};
-        bool operator < (const AccumPoint& r) const { return value > r.value; }
-    };
-
-    struct Accum
-    {
-        int counter;
-        int angle_scaled;
-        cv::Mat accum;
-        std::vector<AccumPoint> local_max;
-        Accum(
-            int counter = 0
-            )
-            : counter(counter)
-        {};
-        bool operator < (const Accum& r) const { return counter > r.counter; }
-    };
 
     cv::Mat normalize_mat(const cv::Mat& mat, int _max)
     {
@@ -236,7 +242,7 @@ public:
         }
     }
 
-    std::vector <cv::Mat> hough_rect(
+    void hough_rect(
             const cv::Mat& image,
             const cv::Mat& edges_char,
             const cv::Mat& angles,
@@ -251,35 +257,59 @@ public:
             accums[i].angle_scaled = i;
         }
 
+        // std::vector<AccumPoint> max_accums;
+
+        // AccumPoint tmp_max_accum = AccumPoint(-1, 0, Cell(-1, -1));
+
         double k = ((double)hough_width / (double)hough_height);
         for (int row = 0; row < edges_char.rows; row++) {
             for (int col = 0; col < edges_char.cols; col++) {
                 if (edges_char.at<uchar>(row, col) == 0) {
                     continue;
                 }
+
                 run_rectangle(image, accums, hough_scale, hough_scale_angle,
                               max_accum, angles.at<int>(row, col), hough_height, k, row, col);
                 run_rectangle(image, accums, hough_scale, hough_scale_angle,
                               max_accum, angles.at<int>(row, col) - 90, hough_height, k, row, col);
 
+                // bool new_cur_max;
+                // for (int i = 0; i < max_accums.size(); i++) {
+                //     if (get_distance(tmp_max_accum.cell, max_accums[i].cell) < k * k) {
+                //         max_accums[i] = tmp_max_accum;
+                //         new_cur_max = true;
+                //     }
+                // }
+
+                // if (!new_cur_max) {
+                //     max_accums.push_back(tmp_max_accum);
+                // }
+
+                // if (max_accums.size() == 0) {
+                //     max_accums.push_back(tmp_max_accum);
+                // }
             }
         }
 
-        int scaled_angle = max_accum.angle / hough_scale_angle;
+        // sort(max_accums.begin(), max_accums.end());
 
-        if ((size_t)scaled_angle > accums.size()) {
-            std::vector <cv::Mat> angles_accum_char;
-            return angles_accum_char;
-        }
-        sort(accums.begin(), accums.end());
+        //--------------
 
-        std::vector <cv::Mat> angles_accum_char(max_angle + 1);
+        // int scaled_angle = max_accum.angle / hough_scale_angle;
 
-        for (int angle = 0; angle <= max_angle; angle++) {
-            angles_accum_char[angle] = int_to_char_global_max(accums[angle].accum, max_accum.value);
-        }
+        // if ((size_t)scaled_angle > accums.size()) {
+        //     std::vector <cv::Mat> angles_accum_char;
+        //     return angles_accum_char;
+        // }
+        // sort(accums.begin(), accums.end());
 
-        return angles_accum_char;
+        // std::vector <cv::Mat> angles_accum_char(max_angle + 1);
+
+        // for (int angle = 0; angle <= max_angle; angle++) {
+        //     angles_accum_char[angle] = int_to_char_global_max(accums[angle].accum, max_accum.value);
+        // }
+
+        // return angles_accum_char;
     }
 
     void draw_rect(
@@ -319,7 +349,8 @@ public:
 
         AccumPoint max_accum = AccumPoint(-1, 0, Cell(-1, -1));
 
-        std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
+        // std::vector <cv::Mat> accum = hough_rect(src, edges_char, angles,  max_accum);
+        hough_rect(src, edges_char, angles,  max_accum);
 
         if (max_accum.value == -1) {
             return;
@@ -337,12 +368,12 @@ public:
 
        rects.push_back(rRect);
 
-        cv::Mat C3;
-        int scaled_angle = max_accum.angle / hough_scale_angle;
-        resize(accum[scaled_angle], C3, cv::Size(accum[scaled_angle].cols * 5,
-                                                 accum[scaled_angle].rows * 5));
+        // cv::Mat C3;
+        // int scaled_angle = max_accum.angle / hough_scale_angle;
+        // resize(accum[scaled_angle], C3, cv::Size(accum[scaled_angle].cols * 5,
+        //                                          accum[scaled_angle].rows * 5));
 
-        return;
+        // return;
     }
 };
 
