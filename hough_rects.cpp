@@ -62,6 +62,7 @@ public:
     int hough_width;
     int hough_scale;
     int hough_scale_angle;
+    int rects_num;
 
     HoughRectRecognizer(
             int src_height,
@@ -69,7 +70,8 @@ public:
             int hough_height,
             int hough_width,
             int hough_scale,
-            int hough_scale_angle
+            int hough_scale_angle,
+            int rects_num
             )
             : src_height(src_height)
             , src_width(src_width)
@@ -77,6 +79,7 @@ public:
             , hough_width(hough_width)
             , hough_scale(hough_scale)
             , hough_scale_angle(hough_scale_angle)
+            , rects_num(rects_num)
     {};
 
     cv::Mat normalize_mat(const cv::Mat& mat, int _max)
@@ -248,6 +251,8 @@ public:
             const cv::Mat& angles,
             std::vector<AccumPoint>& max_accums)
     {
+
+        int global_max_counter = 0;
         int max_angle = (180 + 1) / hough_scale_angle;
         std::vector <Accum> accums(max_angle + 1);
 
@@ -256,8 +261,6 @@ public:
                                              image.cols / hough_scale, CV_32SC1);
             accums[i].angle_scaled = i;
         }
-
-
 
         double k = ((double)hough_width / (double)hough_height);
         for (int row = 0; row < edges_char.rows; row++) {
@@ -276,19 +279,15 @@ public:
                 bool new_cur_max = false;
                 for (int i = 0; i < max_accums.size(); i++) {
                     double dist = get_distance(tmp_max_accum.cell, max_accums[i].cell);
-                    if (dist < k * k) {
+                    if (dist <  4 * k * k) {
                         new_cur_max = true;
-                        if (max_accums[i].value < tmp_max_accum.value) {
+                        if (max_accums[i].value < tmp_max_accum.value && tmp_max_accum.value > 1000) {
                             max_accums[i] = tmp_max_accum;
                         }
                     }
                 }
 
-                if (!new_cur_max) {
-                    max_accums.push_back(tmp_max_accum);
-                }
-
-                if (max_accums.size() == 0) {
+                if (!new_cur_max && tmp_max_accum.value > 1000) {
                     max_accums.push_back(tmp_max_accum);
                 }
             }
@@ -336,32 +335,26 @@ public:
 
         hough_rect(src, edges_char, angles,  max_accums);
 
-        // if (max_accum.value == -1) {
-        //     return;
-        // }
-
         if (max_accums.size() == 0) {
             return;
         }
 
-        std::vector<Cell> points;
-        points.push_back(max_accums[0].cell);
-
-        points[0].col = points[0].col * this->hough_scale + this->hough_scale / 2;
-        points[0].row = points[0].row * this->hough_scale + this->hough_scale / 2;
-
-        cv::Vec6f rRect(points[0].col, points[0].row,
-                        this->src_width, this->src_height,
-                        max_accums[0].angle, 0);
-
-       rects.push_back(rRect);
+        for (int i = 0; i < max_accums.size(); i++) {
+            if (i == 0 || (max_accums[i].value != max_accums[i - 1].value)) {
+                cv::Vec6f rRect(
+                    max_accums[i].cell.col * this->hough_scale + this->hough_scale / 2,
+                    max_accums[i].cell.row * this->hough_scale + this->hough_scale / 2,
+                    this->src_width, this->src_height, max_accums[0].angle, 0);
+                rects.push_back(rRect);
+            }
+        }
     }
 };
 
 void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rect_height,
-            int rect_width, int accum_scale, int angle_scale)
+            int rect_width, int accum_scale, int angle_scale, int rects_num)
 {
-    HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale);
+    HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale, rects_num);
     std::vector<cv::Vec6f> rects;
     hr.recognize(src_image, rects);
 
