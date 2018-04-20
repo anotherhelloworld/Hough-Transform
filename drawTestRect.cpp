@@ -29,9 +29,10 @@ int main() {
 //        // waitKey(0);
 //    }
 
-//    Mat image(600, 1000, CV_8U, Scalar(0));
-//    image.setTo(Scalar(255 ,255, 255));
-//    drawTestRect(image, Point2f(1000 / 2 - 200, 600 / 2), Size2f(300, 100), 0);
+    Mat image(600, 1000, CV_8U, Scalar(0));
+    image.setTo(Scalar(255 ,255, 255));
+    drawTestRect(image, Point2f(1000 / 2 - 200, 600 / 2 - 150), Size2f(300, 100), 0);
+    drawTestRect(image, Point2f(1000 / 2 + 300, 600 / 2 + 50), Size2f(300, 100), 0);
 //    drawTestRect(image, Point2f(1000 / 2 + 200, 600 / 2), Size2f(300, 100), 57);
 
     // Mat image(300, 400, CV_8U, Scalar(0));
@@ -40,5 +41,5 @@ int main() {
 
 
 
-    imwrite("circleTest.png", image);
+    imwrite("twoRectsTest.png", image);
 }

@@ -20,10 +20,10 @@ int main(int argc, char** argv)
     if( argc != 2 || !(img=imread(argv[1], 1)).data)
         return -1;
     cvtColor(img, gray, COLOR_BGR2GRAY);
-    GaussianBlur(gray, gray, Size(9, 9), 2, 2 );
+    GaussianBlur(gray, gray, Size(9, 9), 2, 2);
     Mat rects;
 
-    HoughRects(gray, rects, 100, 300, 5, 5);
+    HoughRects(gray, rects, 100, 300);
 
     for (int i = 0; i < rects.rows; i++) {
         drawTestRect(img, Point2f(rects.at<float>(i, 0), rects.at<float>(i, 1)), Size2f(rects.at<float>(i, 2), rects.at<float>(i, 3)), rects.at<float>(i, 4));

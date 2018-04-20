@@ -31,9 +31,14 @@ struct AccumPoint
     bool operator < (const AccumPoint& r) const { return value > r.value; }
 };
 
-double get_distance(Cell& c1, Cell& c2)
+int get_distance(Cell& c1, Cell& c2)
 {
     return (c2.row - c1.row) * (c2.row - c1.row) + (c2.col - c1.col) * (c2.col - c1.col);
+}
+
+Cell get_real_cell(Cell& c, int hough_scale)
+{
+    return Cell(c.row * hough_scale + hough_scale / 2, c.col * hough_scale + hough_scale / 2);
 }
 
 struct Accum
@@ -263,6 +268,7 @@ public:
         }
 
         double k = ((double)hough_width / (double)hough_height);
+        int rect_diag = hough_width * hough_width + hough_height * hough_height;
         for (int row = 0; row < edges_char.rows; row++) {
             for (int col = 0; col < edges_char.cols; col++) {
                 if (edges_char.at<uchar>(row, col) == 0) {
@@ -276,24 +282,30 @@ public:
                 run_rectangle(image, accums, hough_scale, hough_scale_angle,
                               tmp_max_accum, angles.at<int>(row, col) - 90, hough_height, k, row, col);
 
-                bool new_cur_max = false;
-                for (int i = 0; i < max_accums.size(); i++) {
-                    double dist = get_distance(tmp_max_accum.cell, max_accums[i].cell);
-                    if (dist <  4 * k * k) {
-                        new_cur_max = true;
-                        if (max_accums[i].value < tmp_max_accum.value && tmp_max_accum.value > 1000) {
+                if (rects_num == 1) {
+                    if (max_accums[0].value < tmp_max_accum.value) {
+                        max_accums[0] = tmp_max_accum;
+                    }
+                } else {
+                    bool updated = false;
+                    for (int i = 0; i < max_accums.size() && global_max_counter > 0 && !updated; i++) {
+                        Cell c1 = get_real_cell(max_accums[i].cell, hough_scale);
+                        Cell c2 = get_real_cell(tmp_max_accum.cell, hough_scale);
+                        int dist = get_distance(c1, c2);
+                        if (dist * 4 < rect_diag && max_accums[i].value < tmp_max_accum.value) {
                             max_accums[i] = tmp_max_accum;
+                            updated = true;
                         }
                     }
-                }
 
-                if (!new_cur_max && tmp_max_accum.value > 1000) {
-                    max_accums.push_back(tmp_max_accum);
+                    if (!updated && global_max_counter < max_accums.size()) {
+                        max_accums[global_max_counter] = tmp_max_accum;
+                        global_max_counter++;
+                    }
+                    sort(max_accums.begin(), max_accums.end());
                 }
             }
         }
-
-        sort(max_accums.begin(), max_accums.end());
     }
 
     void draw_rect(
@@ -331,28 +343,56 @@ public:
             return;
         }
 
-        std::vector<AccumPoint> max_accums;
+        std::vector<AccumPoint> max_accums(rects_num);
 
-        hough_rect(src, edges_char, angles,  max_accums);
+        hough_rect(src, edges_char, angles, max_accums);
 
         if (max_accums.size() == 0) {
             return;
         }
 
-        for (int i = 0; i < max_accums.size(); i++) {
-            if (i == 0 || (max_accums[i].value != max_accums[i - 1].value)) {
-                cv::Vec6f rRect(
-                    max_accums[i].cell.col * this->hough_scale + this->hough_scale / 2,
-                    max_accums[i].cell.row * this->hough_scale + this->hough_scale / 2,
-                    this->src_width, this->src_height, max_accums[0].angle, 0);
-                rects.push_back(rRect);
-            }
+        if (rects_num == 1) {
+            cv::Vec6f rRect(
+                max_accums[0].cell.col * this->hough_scale + this->hough_scale / 2,
+                max_accums[0].cell.row * this->hough_scale + this->hough_scale / 2,
+                this->src_width, this->src_height, max_accums[0].angle, max_accums[0].value);
+            rects.push_back(rRect);
         }
     }
 };
 
+void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rects_num, int accum_scale, int angle_scale)
+{
+    std::vector<cv::Vec6f> res_rects(rects_num);
+    res_rects[0][5] = -1;
+    for (int rect_height = src_image.rows() / 10; rect_height < src_image.rows(); rect_height += src_image.rows() / 10) {
+        for (int rect_width = src_image.cols() / 10; rect_width < src_image.cols(); rect_width += src_image.cols() / 10) {
+            HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale, rects_num);
+            std::vector<cv::Vec6f> rects;
+            hr.recognize(src_image, rects);
+            if (rects[0][5] > res_rects[0][5]) {
+                res_rects[0] = rects[0];
+            }
+        }
+    }
+
+    int rows = (int)res_rects.size();
+    cv::Mat _rects(rows, 6, CV_32FC1);
+    for (int i = 0; i < res_rects.size(); i++) {
+        for (int j = 0; j < 6; j++) {
+            _rects.at<float>(i, j) = res_rects[i][j];
+        }
+    }
+
+    if (rows > 0) {
+        _output.create(rows, 6, CV_32FC1);
+        _output.assign(_rects);
+    }
+    return;
+}
+
 void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rect_height,
-            int rect_width, int accum_scale, int angle_scale, int rects_num)
+            int rect_width, int rects_num, int accum_scale, int angle_scale)
 {
     HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale, rects_num);
     std::vector<cv::Vec6f> rects;
