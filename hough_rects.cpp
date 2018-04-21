@@ -186,8 +186,10 @@ public:
 
     void operator() (const Range& boundaries) const
     {
+        int start = boundaries.start;
+        int end = boundaries.end;
         double k = ((double)hough_width / (double)hough_height);
-        for (int row = 0; row < edges_char.rows; row++) {
+        for (int row = start; row < end; row++) {
             for (int col = 0; col < edges_char.cols; col++) {
                 if (edges_char.at<uchar>(row, col) == 0) {
                     continue;
@@ -533,8 +535,8 @@ public:
 
         std::vector<AccumPoint> max_accums(rects_num);
 
-        // hough_rect(src, edges_char, angles, max_accums);
-        hough_rect_parallel(src, edges_char, angles, max_accums);
+        hough_rect(src, edges_char, angles, max_accums);
+        // hough_rect_parallel(src, edges_char, angles, max_accums);
 
         if (max_accums.size() == 0) {
             return;
