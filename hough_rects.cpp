@@ -55,7 +55,154 @@ struct Accum
     bool operator < (const Accum& r) const { return counter > r.counter; }
 };
 
+class HoughRectsAccumInvoker : public ParallelLoopBody
+{
 
+
+private:
+    const cv::Mat& image;
+    const cv::Mat& edges_char;
+    const cv::Mat& angles;
+    std::vector<AccumPoint>& max_accums;
+    std::vector<Accum>& accums;
+    int hough_width;
+    int hough_height;
+    int hough_scale;
+    int hough_scale_angle;
+
+public:
+    HoughRectsAccumInvoker(
+        const cv::Mat& image,
+        const cv::Mat& edges_char,
+        const cv::Mat& angles,
+        std::vector<AccumPoint>& max_accums,
+        std::vector<Accum>& accums,
+        int hough_width,
+        int hough_height,
+        int hough_scale,
+        int hough_scale_angle
+        )
+        : image(image)
+        , edges_char(edges_char)
+        , angles(angles)
+        , max_accums(max_accums)
+        , accums(accums)
+        , hough_width(hough_width)
+        , hough_height(hough_height)
+        , hough_scale(hough_scale)
+        , hough_scale_angle(hough_scale_angle)
+    {}
+
+    ~HoughRectsAccumInvoker() { }
+
+    std::vector <Cell> rotate_rect(Cell rect_coords[4], Cell centr, int angle) const
+    {
+        std::vector<Cell> res(4);
+        for (int i = 0; i < 4; i++) {
+            rect_coords[i].row -= centr.row;
+            rect_coords[i].col -= centr.col;
+        }
+
+        for (size_t i = 0; i < res.size(); i++) {
+            double theta = (angle * CV_PI) / 180.0;
+            res[i].row = rect_coords[i].col * sin(theta) + rect_coords[i].row * cos(theta);
+            res[i].col = rect_coords[i].col * cos(theta) - rect_coords[i].row * sin(theta);
+        }
+
+        for (size_t i = 0; i < res.size(); i++) {
+            res[i].row += centr.row;
+            res[i].col += centr.col;
+        }
+
+        return res;
+    }
+
+    void run_along_line(
+            const cv::Mat& image,
+            std::vector <Accum>& accum,
+            Cell start,
+            Cell finish,
+            int scale,
+            int scale_angle,
+            int angle) const
+    {
+        if (angle < 0) angle += 180; else if (angle > 180) angle -= 180;
+
+        int angleScaled = angle / scale_angle;
+        double _norm = sqrt((finish.row - start.row) * (finish.row - start.row) +
+                            (finish.col - start.col) * (finish.col - start.col));
+        for (double i = 0; i <= 1; i += scale / (double)(_norm)) {
+            Cell p = Cell(floor(start.row + (finish.row - start.row) * i),
+                          floor(start.col + (finish.col - start.col) * i));
+            if (p.row < image.rows && p.row > 0 && p.col < image.cols && p.col > 0) {
+                accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale)++;
+                accum[angleScaled].counter++;
+                if (accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale) > max_accums[0].value) {
+                    max_accums[0].value = accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale);
+                    max_accums[0].cell.row = p.row / scale;
+                    max_accums[0].cell.col = p.col / scale;
+                    max_accums[0].angle = angle;//?
+                }
+            }
+        }
+    }
+
+    void run_rectangle(
+            const cv::Mat& image,
+            std::vector<Accum>& accum,
+            int scale,
+            int scale_angle,
+            int angle,
+            int rad,
+            double k,
+            int row,
+            int col) const
+    {
+        for (int r = rad - 2; r <=  rad + 2; r++) {
+            int bound = 15;
+
+            int start = angle - bound;
+            int finish = angle + bound;
+            for (int angle = start; angle <= finish; angle += scale_angle) {
+                int cur_height = r;
+                int cur_width = k * r;
+
+                Cell ptl = Cell(row - cur_height, col - cur_width);
+                Cell ptr = Cell(row - cur_height, col + cur_width);
+                Cell pbr = Cell(row + cur_height, col + cur_width);
+                Cell pbl = Cell(row + cur_height, col - cur_width);
+
+
+                Cell rect_coords[4] = { ptl, ptr, pbr, pbl };
+                std::vector <Cell> rotate_coords = rotate_rect(rect_coords, Cell(row, col), angle);
+
+                run_along_line(image, accum, rotate_coords[0], rotate_coords[1], scale, scale_angle, angle);
+                run_along_line(image, accum, rotate_coords[1], rotate_coords[2], scale, scale_angle, angle);
+                run_along_line(image, accum, rotate_coords[2], rotate_coords[3], scale, scale_angle, angle);
+                run_along_line(image, accum, rotate_coords[3], rotate_coords[0], scale, scale_angle, angle);
+            }
+        }
+    }
+
+    void operator() (const Range& boundaries) const
+    {
+        double k = ((double)hough_width / (double)hough_height);
+        for (int row = 0; row < edges_char.rows; row++) {
+            for (int col = 0; col < edges_char.cols; col++) {
+                if (edges_char.at<uchar>(row, col) == 0) {
+                    continue;
+                }
+
+                AccumPoint tmp_max_accum = AccumPoint(-1, 0, Cell(-1, -1));
+
+                run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                              angles.at<int>(row, col), hough_height, k, row, col);
+                run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                              angles.at<int>(row, col) - 90, hough_height, k, row, col);
+            }
+        }
+    }
+};
 
 class HoughRectRecognizer
 {
@@ -70,21 +217,21 @@ public:
     int rects_num;
 
     HoughRectRecognizer(
-            int src_height,
-            int src_width,
-            int hough_height,
-            int hough_width,
-            int hough_scale,
-            int hough_scale_angle,
-            int rects_num
-            )
-            : src_height(src_height)
-            , src_width(src_width)
-            , hough_height(hough_height)
-            , hough_width(hough_width)
-            , hough_scale(hough_scale)
-            , hough_scale_angle(hough_scale_angle)
-            , rects_num(rects_num)
+        int src_height,
+        int src_width,
+        int hough_height,
+        int hough_width,
+        int hough_scale,
+        int hough_scale_angle,
+        int rects_num
+        )
+        : src_height(src_height)
+        , src_width(src_width)
+        , hough_height(hough_height)
+        , hough_width(hough_width)
+        , hough_scale(hough_scale)
+        , hough_scale_angle(hough_scale_angle)
+        , rects_num(rects_num)
     {};
 
     cv::Mat normalize_mat(const cv::Mat& mat, int _max)
@@ -250,6 +397,47 @@ public:
         }
     }
 
+    void hough_rect_parallel(
+            const cv::Mat& image,
+            const cv::Mat& edges_char,
+            const cv::Mat& angles,
+            std::vector<AccumPoint>& max_accums)
+    {
+        int global_max_counter = 0;
+        int max_angle = (180 + 1) / hough_scale_angle;
+        std::vector <Accum> accums(max_angle + 1);
+
+        max_accums[0] = AccumPoint(-1, 0, Cell(-1, -1));
+
+        for (int i = 0; i <= max_angle; i ++) {
+            accums[i].accum = cv::Mat::zeros(image.rows / hough_scale,
+                                             image.cols / hough_scale, CV_32SC1);
+            accums[i].angle_scaled = i;
+        }
+
+        double k = ((double)hough_width / (double)hough_height);
+        int rect_diag = hough_width * hough_width + hough_height * hough_height;
+
+        // const cv::Mat& image,
+        // const cv::Mat& edges_char,
+        // const cv::Mat& angles,
+        // std::vector<AccumPoint>& max_accums,
+        // std::vector<Accum>& accums,
+        // int hough_width,
+        // int hough_height,
+        // int hough_scale,
+        // int hough_scale_angle
+
+        int numThreads = std::max(1, getNumThreads());
+        parallel_for_(Range(0, edges_char.rows),
+                  HoughRectsAccumInvoker(
+                    image, edges_char, angles,
+                    max_accums, accums, hough_width,
+                    hough_height, hough_scale, hough_scale_angle),
+                  numThreads);
+    }
+
+
     void hough_rect(
             const cv::Mat& image,
             const cv::Mat& edges_char,
@@ -345,7 +533,8 @@ public:
 
         std::vector<AccumPoint> max_accums(rects_num);
 
-        hough_rect(src, edges_char, angles, max_accums);
+        // hough_rect(src, edges_char, angles, max_accums);
+        hough_rect_parallel(src, edges_char, angles, max_accums);
 
         if (max_accums.size() == 0) {
             return;
