@@ -420,16 +420,6 @@ public:
         double k = ((double)hough_width / (double)hough_height);
         int rect_diag = hough_width * hough_width + hough_height * hough_height;
 
-        // const cv::Mat& image,
-        // const cv::Mat& edges_char,
-        // const cv::Mat& angles,
-        // std::vector<AccumPoint>& max_accums,
-        // std::vector<Accum>& accums,
-        // int hough_width,
-        // int hough_height,
-        // int hough_scale,
-        // int hough_scale_angle
-
         int numThreads = std::max(1, getNumThreads());
         parallel_for_(Range(0, edges_char.rows),
                   HoughRectsAccumInvoker(
@@ -438,7 +428,6 @@ public:
                     hough_height, hough_scale, hough_scale_angle),
                   numThreads);
     }
-
 
     void hough_rect(
             const cv::Mat& image,
@@ -518,25 +507,12 @@ public:
         }
     }
 
-    void recognize(cv::InputArray _src, std::vector<cv::Vec6f>& rects)
+    void recognize(cv::Mat& src, std::vector<cv::Vec6f>& rects, cv::Mat& edges, cv::Mat& angles)
     {
-        cv::Mat src;
-        _src.copyTo(src);
-        cv::Mat image;
-
-        cv::Mat angles;
-
-        bool empty = false;
-        cv::Mat edges_char = find_edges(src, angles, empty);
-
-        if (empty) {
-            return;
-        }
-
         std::vector<AccumPoint> max_accums(rects_num);
 
-        hough_rect(src, edges_char, angles, max_accums);
-        // hough_rect_parallel(src, edges_char, angles, max_accums);
+        // hough_rect(src, edges, angles, max_accums);
+        hough_rect_parallel(src, edges, angles, max_accums);
 
         if (max_accums.size() == 0) {
             return;
@@ -557,36 +533,48 @@ void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rects_num
 {
 
     if ((rect_height == -1 || rect_width == -1) && rects_num == 1) {
-        std::vector<cv::Vec6f> res_rects(rects_num);
-        res_rects[0][5] = -1;
-        for (int rect_height = src_image.rows() / 10; rect_height < src_image.rows(); rect_height += src_image.rows() / 10) {
-            for (int rect_width = src_image.cols() / 10; rect_width < src_image.cols(); rect_width += src_image.cols() / 10) {
-                HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale, rects_num);
-                std::vector<cv::Vec6f> rects;
-                hr.recognize(src_image, rects);
-                if (rects[0][5] > res_rects[0][5]) {
-                    res_rects[0] = rects[0];
-                }
-            }
-        }
+        // std::vector<cv::Vec6f> res_rects(rects_num);
+        // res_rects[0][5] = -1;
+        // for (int rect_height = src_image.rows() / 10; rect_height < src_image.rows(); rect_height += src_image.rows() / 10) {
+        //     for (int rect_width = src_image.cols() / 10; rect_width < src_image.cols(); rect_width += src_image.cols() / 10) {
+        //         HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale, rects_num);
+        //         std::vector<cv::Vec6f> rects;
+        //         hr.recognize(src_image, rects);
+        //         if (rects[0][5] > res_rects[0][5]) {
+        //             res_rects[0] = rects[0];
+        //         }
+        //     }
+        // }
 
-        int rows = (int)res_rects.size();
-        cv::Mat _rects(rows, 6, CV_32FC1);
-        for (int i = 0; i < res_rects.size(); i++) {
-            for (int j = 0; j < 6; j++) {
-                _rects.at<float>(i, j) = res_rects[i][j];
-            }
-        }
+        // int rows = (int)res_rects.size();
+        // cv::Mat _rects(rows, 6, CV_32FC1);
+        // for (int i = 0; i < res_rects.size(); i++) {
+        //     for (int j = 0; j < 6; j++) {
+        //         _rects.at<float>(i, j) = res_rects[i][j];
+        //     }
+        // }
 
-        if (rows > 0) {
-            _output.create(rows, 6, CV_32FC1);
-            _output.assign(_rects);
-        }
-        return;
+        // if (rows > 0) {
+        //     _output.create(rows, 6, CV_32FC1);
+        //     _output.assign(_rects);
+        // }
+        // return;
     } else if (rects_num == 1) {
         HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale, rects_num);
         std::vector<cv::Vec6f> rects;
-        hr.recognize(src_image, rects);
+
+        cv::Mat src;
+        cv::Mat angles;
+        src_image.copyTo(src);
+
+        bool empty = false;
+        cv::Mat edges = hr.find_edges(src, angles, empty);
+
+        if (empty) {
+            return;
+        }
+
+        hr.recognize(src, rects, edges, angles);
 
         int rows = (int)rects.size();
         cv::Mat _rects(rows, 6, CV_32FC1);
