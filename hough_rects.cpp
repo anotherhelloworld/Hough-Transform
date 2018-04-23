@@ -55,13 +55,97 @@ struct Accum
     bool operator < (const Accum& r) const { return counter > r.counter; }
 };
 
+class FindEdgesInvoker : public ParallelLoopBody
+{
+private:
+    const cv::Mat& mat;
+    cv::Mat& angles;
+    bool& empty;
+public:
+    FindEdgesInvoker(
+        const cv::Mat& mat,
+        cv::Mat& angles,
+        bool& empty
+        )
+        : mat(mat)
+        , angles(angles)
+        , empty(empty)
+        {};
+
+    ~FindEdgesInvoker();
+
+    // cv::Mat int_to_char(const cv::Mat& mat)
+    // {
+    //     double _min = 0, _max = 0;
+    //     cv::minMaxLoc(mat, &_min, &_max);
+    //     return normalize_mat(mat, _max);
+    // }
+
+    // cv::Mat normalize_mat(const cv::Mat& mat, int _max)
+    // {
+    //     cv::Mat res = cv::Mat::zeros(mat.rows, mat.cols, CV_8UC1);
+    //     if (_max <= 0) {
+    //         return res;
+    //     }
+    //     for (int i = 0; i < mat.rows; i++) {
+    //         for (int j = 0; j < mat.cols; j++) {
+    //             res.at<uchar>(i, j) = (255 * mat.at<int>(i, j)) / (int)_max;
+    //         }
+    //     }
+    //     return res;
+    // }
+
+    void operator() (const Range& boundaries) const
+    {
+        cv::Mat delta_i = cv::Mat::zeros(mat.rows - 1, mat.cols - 1, CV_32SC1);
+        std::vector<AccumPoint> filtering;
+
+        angles = cv::Mat::zeros(delta_i.rows, delta_i.cols, CV_32SC1);
+
+        for (int i = 0; i < mat.rows - 1; i++) {
+            for (int j = 0; j < mat.cols - 1; j++) {
+
+                int dx = (int)mat.at<uchar>(i, j) - (int)mat.at<uchar>(i, j + 1);
+                int dy = (int)mat.at<uchar>(i, j) - (int)mat.at<uchar>(i + 1, j);
+                int laplas = dx * dx + dy * dy;
+                double alpha = atan2(dy, dx);
+
+                if (alpha < 0) {
+                    alpha += CV_PI;
+                }
+
+                int alpha_grad = (alpha * 180.0) / CV_PI;
+                angles.at<int>(i, j) = alpha_grad;
+                delta_i.at<int>(i, j) = laplas;
+                filtering.push_back(AccumPoint(laplas, 0, Cell(i, j)));
+            }
+        }
+
+        sort(filtering.begin(), filtering.end());
+
+        std::vector<AccumPoint> filtered(filtering.begin(), filtering.begin() + filtering.size() * 5 / 10);
+
+        if (filtered.size() == 0) {
+            empty = true;
+        }
+
+        cv::Mat edges = cv::Mat::zeros(delta_i.rows, delta_i.cols, CV_32SC1);
+
+        for (size_t i = 0; i < filtered.size(); i++) {
+            edges.at<int>(filtered[i].cell.row, filtered[i].cell.col) = filtered[i].value;
+        }
+
+        // cv::Mat edges_char = int_to_char(edges);
+
+        // return edges_char;
+    }
+};
+
 class HoughRectsAccumInvoker : public ParallelLoopBody
 {
-
-
 private:
     const cv::Mat& image;
-    const cv::Mat& edges_char;
+    const std::vector<AccumPoint>& edges;
     const cv::Mat& angles;
     std::vector<AccumPoint>& max_accums;
     std::vector<Accum>& accums;
@@ -73,7 +157,7 @@ private:
 public:
     HoughRectsAccumInvoker(
         const cv::Mat& image,
-        const cv::Mat& edges_char,
+        const std::vector<AccumPoint>& edges,
         const cv::Mat& angles,
         std::vector<AccumPoint>& max_accums,
         std::vector<Accum>& accums,
@@ -83,7 +167,7 @@ public:
         int hough_scale_angle
         )
         : image(image)
-        , edges_char(edges_char)
+        , edges(edges)
         , angles(angles)
         , max_accums(max_accums)
         , accums(accums)
@@ -189,20 +273,32 @@ public:
         int start = boundaries.start;
         int end = boundaries.end;
         double k = ((double)hough_width / (double)hough_height);
-        for (int row = start; row < end; row++) {
-            for (int col = 0; col < edges_char.cols; col++) {
-                if (edges_char.at<uchar>(row, col) == 0) {
-                    continue;
-                }
-
-                AccumPoint tmp_max_accum = AccumPoint(-1, 0, Cell(-1, -1));
-
-                run_rectangle(image, accums, hough_scale, hough_scale_angle,
-                              angles.at<int>(row, col), hough_height, k, row, col);
-                run_rectangle(image, accums, hough_scale, hough_scale_angle,
-                              angles.at<int>(row, col) - 90, hough_height, k, row, col);
+        for (int i = start; i < end; i++) {
+            if (edges[i].value == 0) {
+                continue;
             }
+
+            AccumPoint tmp_max_accum = AccumPoint(-1, 0, Cell(-1, -1));
+
+            run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                          angles.at<int>(edges[i].cell.row, edges[i].cell.col), hough_height, k, edges[i].cell.row, edges[i].cell.col);
+            run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                          angles.at<int>(edges[i].cell.row, edges[i].cell.col) - 90, hough_height, k, edges[i].cell.row, edges[i].cell.col);
         }
+        // for (int row = start; row < end; row++) {
+        //     for (int col = 0; col < edges_char.cols; col++) {
+        //         if (edges_char.at<uchar>(row, col) == 0) {
+        //             continue;
+        //         }
+
+        //         AccumPoint tmp_max_accum = AccumPoint(-1, 0, Cell(-1, -1));
+
+        //         run_rectangle(image, accums, hough_scale, hough_scale_angle,
+        //                       angles.at<int>(row, col), hough_height, k, row, col);
+        //         run_rectangle(image, accums, hough_scale, hough_scale_angle,
+        //                       angles.at<int>(row, col) - 90, hough_height, k, row, col);
+        //     }
+        // }
     }
 };
 
@@ -263,7 +359,7 @@ public:
         return normalize_mat(mat, _max);
     }
 
-    cv::Mat find_edges(const cv::Mat& mat, cv::Mat& angles, bool& empty)
+    std::vector<AccumPoint> find_edges(const cv::Mat& mat, cv::Mat& angles, bool& empty)
     {
         cv::Mat delta_i = cv::Mat::zeros(mat.rows - 1, mat.cols - 1, CV_32SC1);
         std::vector<AccumPoint> filtering;
@@ -297,15 +393,7 @@ public:
             empty = true;
         }
 
-        cv::Mat edges = cv::Mat::zeros(delta_i.rows, delta_i.cols, CV_32SC1);
-
-        for (size_t i = 0; i < filtered.size(); i++) {
-            edges.at<int>(filtered[i].cell.row, filtered[i].cell.col) = filtered[i].value;
-        }
-
-        cv::Mat edges_char = int_to_char(edges);
-
-        return edges_char;
+        return filtered;
     }
 
     std::vector <Cell> rotate_rect(Cell rect_coords[4], Cell centr, int angle)
@@ -401,7 +489,7 @@ public:
 
     void hough_rect_parallel(
             const cv::Mat& image,
-            const cv::Mat& edges_char,
+            const std::vector<AccumPoint>& edges,
             const cv::Mat& angles,
             std::vector<AccumPoint>& max_accums)
     {
@@ -421,9 +509,9 @@ public:
         int rect_diag = hough_width * hough_width + hough_height * hough_height;
 
         int numThreads = std::max(1, getNumThreads());
-        parallel_for_(Range(0, edges_char.rows),
+        parallel_for_(Range(0, edges.size()),
                   HoughRectsAccumInvoker(
-                    image, edges_char, angles,
+                    image, edges, angles,
                     max_accums, accums, hough_width,
                     hough_height, hough_scale, hough_scale_angle),
                   numThreads);
@@ -507,7 +595,7 @@ public:
         }
     }
 
-    void recognize(cv::Mat& src, std::vector<cv::Vec6f>& rects, cv::Mat& edges, cv::Mat& angles)
+    void recognize(cv::Mat& src, std::vector<cv::Vec6f>& rects, std::vector<AccumPoint>& edges, cv::Mat& angles)
     {
         std::vector<AccumPoint> max_accums(rects_num);
 
@@ -568,7 +656,7 @@ void HoughRects(cv::InputArray src_image, cv::OutputArray _output, int rects_num
         src_image.copyTo(src);
 
         bool empty = false;
-        cv::Mat edges = hr.find_edges(src, angles, empty);
+        std::vector<AccumPoint> edges = hr.find_edges(src, angles, empty);
 
         if (empty) {
             return;
