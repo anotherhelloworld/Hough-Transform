@@ -29,6 +29,33 @@ struct AccumPoint
         , cell(cell)
     {};
     bool operator < (const AccumPoint& r) const { return value > r.value; }
+
+    // AccumPoint& operator=(const AccumPoint& right)
+    // {
+    //     if (this == &right) {
+    //         return *this;
+    //     }
+    //     value = right.value;
+    //     angle = right.angle;
+    //     cell = right.cell;
+    //     return *this;
+    // }
+};
+
+struct RectSize
+{
+    int height;
+    int width;
+    AccumPoint accum;
+    RectSize(
+        int height,
+        int width,
+        AccumPoint accum
+        )
+        : height(height)
+        , width(width)
+        , accum(accum)
+    {};
 };
 
 int get_distance(Cell& c1, Cell& c2)
@@ -67,6 +94,7 @@ private:
     int hough_height;
     int hough_scale;
     int hough_scale_angle;
+    bool select_size;
 
 public:
     HoughRectsAccumInvoker(
@@ -186,39 +214,16 @@ public:
     {
         int start = boundaries.start;
         int end = boundaries.end;
-
-        if (hough_width == 0 || hough_height == 0) {
-            for (int row = start; row < end; row++) {
-                for (int col = 0; col < edges_char.cols; col++) {
-                    if (edges_char.at<uchar>(row, col) == 0) {
-                        continue;
-                    }
-
-                    AccumPoint tmp_max_accum = AccumPoint(-1, 0, Cell(-1, -1));
-                    for (int height = image.rows / 10; height < image.rows; height += image.rows / 10) {
-                        for (int width = image.cols / 10; width < image.cols; width += image.cols / 10) {
-                            double k = ((double)width / (double)height);
-                            run_rectangle(image, accums, hough_scale, hough_scale_angle,
-                                  angles.at<int>(row, col), height, k, row, col);
-                            run_rectangle(image, accums, hough_scale, hough_scale_angle,
-                                  angles.at<int>(row, col) - 90, height, k, row, col);
-                        }
-                    }
+        double k = ((double)hough_width / (double)hough_height);
+        for (int row = start; row < end; row++) {
+            for (int col = 0; col < edges_char.cols; col++) {
+                if (edges_char.at<uchar>(row, col) == 0) {
+                    continue;
                 }
-            }
-        } else {
-            double k = ((double)hough_width / (double)hough_height);
-            for (int row = start; row < end; row++) {
-                for (int col = 0; col < edges_char.cols; col++) {
-                    if (edges_char.at<uchar>(row, col) == 0) {
-                        continue;
-                    }
-                    AccumPoint tmp_max_accum = AccumPoint(-1, 0, Cell(-1, -1));
-                    run_rectangle(image, accums, hough_scale, hough_scale_angle,
-                                  angles.at<int>(row, col), hough_height, k, row, col);
-                    run_rectangle(image, accums, hough_scale, hough_scale_angle,
-                                  angles.at<int>(row, col) - 90, hough_height, k, row, col);
-                }
+                run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                              angles.at<int>(row, col), hough_height, k, row, col);
+                run_rectangle(image, accums, hough_scale, hough_scale_angle,
+                              angles.at<int>(row, col) - 90, hough_height, k, row, col);
             }
         }
     }
@@ -439,12 +444,37 @@ public:
         int rect_diag = hough_width * hough_width + hough_height * hough_height;
 
         int numThreads = std::max(1, getNumThreads());
-        parallel_for_(Range(0, edges_char.rows),
+
+        if (hough_width == 0 || hough_height == 0) {
+            RectSize best_rect(0, 0, AccumPoint(-1, 0, Cell(-1, -1)));
+            for (int height = image.rows / 10; height < image.rows; height += image.rows / 10) {
+                for (int width = image.cols / 10; width < image.cols; width += image.cols / 10) {
+                    parallel_for_(Range(0, edges_char.rows),
+                      HoughRectsAccumInvoker(
+                        image, edges_char, angles,
+                        max_accums, accums, width,
+                        height, hough_scale, hough_scale_angle),
+                      numThreads);
+                    if (best_rect.accum.value < max_accums[0].value) {
+                        best_rect.width = width;
+                        best_rect.height = height;
+                        best_rect.accum = max_accums[0];
+                    }
+                }
+            }
+            max_accums[0] = best_rect.accum;
+            hough_width = best_rect.width;
+            hough_height = best_rect.height;
+            return;
+        } else {
+            parallel_for_(Range(0, edges_char.rows),
                   HoughRectsAccumInvoker(
                     image, edges_char, angles,
                     max_accums, accums, hough_width,
                     hough_height, hough_scale, hough_scale_angle),
                   numThreads);
+            return;
+        }
     }
 
     void hough_rect(
