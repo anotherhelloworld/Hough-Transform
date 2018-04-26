@@ -353,7 +353,7 @@ public:
         return res;
     }
 
-    void find_local_max(const std::vector<Accum>& accums, int windowSize, std::vector<AccumPoint>& localMax)
+    void find_local_max(const std::vector<Accum>& accums, int windowSize, std::vector<AccumPoint>& localMax, AccumPoint& globalMaxAccum)
     {
         for (int i = 0; i < accums.size() * 5 / 10; i++) {
             assert(windowSize <= accums[i].accum.rows);
@@ -361,7 +361,6 @@ public:
 
             for (int row = 0; row < accums[i].accum.rows - windowSize; row += windowSize) {
                 for (int col = windowSize; col <= accums[i].accum.cols - windowSize; col += windowSize) {
-
 
                     cv::Rect roi(
                         col,
@@ -374,12 +373,13 @@ public:
                     double _min, _max;
                     cv::Point minLoc, maxLoc;
                     minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
-                    localMax.push_back(AccumPoint((int)_max, accums[i].angle_scaled, Cell(maxLoc.x + col, maxLoc.y + row)));
+                    if (_max >= globalMaxAccum.value * 0.9) {
+                        localMax.push_back(AccumPoint((int)_max, accums[i].angle_scaled * angleStep, Cell(maxLoc.y + row, maxLoc.x + col)));
+                    }
                 }
             }
         }
     }
-
 
     void houghRectParallel(
             const cv::Mat& image,
@@ -399,30 +399,20 @@ public:
 
         int numThreads = std::max(1, getNumThreads());
 
-        // for (int ratio = minAspectRatio; ratio <= maxAspectRatio; ratio++) {
-        //     int height = sideSize;
-        //     int width = sideSize*ratio;
-        //     parallel_for_(Range(0, edges.rows),
-        //         HoughRectsAccumInvoker(
-        //             image, edges, angles, globalMaxAccum,
-        //             accums, width, height, accumScale,
-        //             angleStep, sideSize, ratio),
-        //         numThreads);
-        // }
-
-        int height = 100;
-        int width = 300;
-        parallel_for_(Range(0, edges.rows),
-            HoughRectsAccumInvoker(
-                image, edges, angles, globalMaxAccum,
-                accums, width, height, accumScale,
-                angleStep, sideSize, 3),
-            numThreads);
+        for (int ratio = minAspectRatio; ratio <= maxAspectRatio; ratio++) {
+            int height = sideSize / 2;
+            int width = sideSize*ratio / 2;
+            parallel_for_(Range(0, edges.rows),
+                HoughRectsAccumInvoker(
+                    image, edges, angles, globalMaxAccum,
+                    accums, width, height, accumScale,
+                    angleStep, sideSize, ratio),
+                numThreads);
+        }
 
         std::sort(accums.begin(), accums.end());
-        find_local_max(accums, sideSize / accumScale, localMax);
+        find_local_max(accums, sideSize / accumScale, localMax, globalMaxAccum);
         std::sort(localMax.begin(), localMax.end());
-        int a = a + 1;
     }
 
     void recognize(cv::Mat& src, std::vector<cv::Vec6f>& rects, cv::Mat& edges, cv::Mat& angles)
@@ -431,19 +421,19 @@ public:
         std::vector<AccumPoint> localMax;
         houghRectParallel(src, edges, angles, globalMaxAccum, localMax);
 
-        // for (int i = 0; i < 2 && i < localMax.size(); i++) {
-        //     cv::Vec6f rRect(
-        //         localMax[0].cell.col * accumScale + accumScale / 2,
-        //         localMax[0].cell.row * accumScale + accumScale / 2,
-        //         sideSize * minAspectRatio, sideSize, localMax[0].angle, localMax[0].value);
-        //     rects.push_back(rRect);
-        // }
+        for (int i = 0; i < 2 && i < localMax.size(); i++) {
+            cv::Vec6f rRect(
+                localMax[i].cell.col * accumScale + accumScale / 2,
+                localMax[i].cell.row * accumScale + accumScale / 2,
+                sideSize * minAspectRatio, sideSize, localMax[0].angle, localMax[0].value);
+            rects.push_back(rRect);
+        }
 
-        cv::Vec6f rRect(
-            globalMaxAccum.cell.col * accumScale + accumScale / 2,
-            globalMaxAccum.cell.row * accumScale + accumScale / 2,
-            sideSize * minAspectRatio, sideSize, globalMaxAccum.angle, globalMaxAccum.value);
-        rects.push_back(rRect);
+        // cv::Vec6f rRect(
+        //     globalMaxAccum.cell.col * accumScale + accumScale / 2,
+        //     globalMaxAccum.cell.row * accumScale + accumScale / 2,
+        //     sideSize * minAspectRatio, sideSize, globalMaxAccum.angle, globalMaxAccum.value);
+        // rects.push_back(rRect);
     }
 };
 
