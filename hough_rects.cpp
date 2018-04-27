@@ -80,18 +80,20 @@ struct Accum
     bool operator < (const Accum& r) const { return counter > r.counter; }
 };
 
-// struct AccumRatio
-// {
-//     Accum& accum;
-//     int aspectRatio;
-//     AccumRatio(
-//         int aspectRatio,
-//         Accum& accum
-//         )
-//         : aspectRatio(aspectRatio)
-//         , accum(accum)
-//     {};
-// };
+struct AccumRatio
+{
+    std::vector<Accum> accums;
+    int aspectRatio;
+    int counter;
+    AccumRatio(
+        int aspectRatio = 0,
+        int counter = 0
+        )
+        : aspectRatio(aspectRatio)
+        , counter(counter)
+    {};
+    bool operator < (const AccumRatio& r) const { return counter > r.counter; }
+};
 
 class HoughRectsAccumInvoker : public ParallelLoopBody
 {
@@ -100,13 +102,16 @@ private:
     const cv::Mat& edges;
     const cv::Mat& angles;
     AccumPoint& globalMaxAccum;
-    std::vector<Accum>& accums;
-    int width;
-    int height;
+    std::vector<AccumRatio>& accums;
+    // int width;
+    // int height;
+    int minAspectRatio;
+    int maxAspectRatio;
     int accumScale;
     int angleStep;
     int sideSize;
-    int aspectRatio;
+    // int aspectRatio;
+
 
 public:
     HoughRectsAccumInvoker(
@@ -114,25 +119,29 @@ public:
         const cv::Mat& edges,
         const cv::Mat& angles,
         AccumPoint& globalMaxAccum,
-        std::vector<Accum>& accums,
-        int width,
-        int height,
+        std::vector<AccumRatio>& accums,
+        int minAspectRatio,
+        int maxAspectRatio,
+        // int width,
+        // int height,
         int accumScale,
         int angleStep,
-        int sideSize,
-        int aspectRatio
+        int sideSize
+        // int aspectRatio
         )
         : image(image)
         , edges(edges)
         , angles(angles)
         , globalMaxAccum(globalMaxAccum)
         , accums(accums)
-        , width(width)
-        , height(height)
+        // , width(width)
+        // , height(height)
+        , minAspectRatio(minAspectRatio)
+        , maxAspectRatio(maxAspectRatio)
         , accumScale(accumScale)
         , angleStep(angleStep)
         , sideSize(sideSize)
-        , aspectRatio(aspectRatio)
+        // , aspectRatio(aspectRatio)
     {}
 
     ~HoughRectsAccumInvoker() { }
@@ -167,8 +176,7 @@ public:
             int scale,
             int angleStep,
             int angle,
-            int height,
-            int width) const
+            AccumRatio& accumRatio) const
     {
         if (angle < 0) angle += 180; else if (angle > 180) angle -= 180;
 
@@ -181,13 +189,12 @@ public:
             if (p.row < image.rows && p.row > 0 && p.col < image.cols && p.col > 0) {
                 accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale)++;
                 accum[angleScaled].counter++;
+                accumRatio.counter++;
                 if (accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale) > globalMaxAccum.value) {
                     globalMaxAccum.value = accum[angleScaled].accum.at<int>(p.row / scale, p.col / scale);
                     globalMaxAccum.cell.row = p.row / scale;
                     globalMaxAccum.cell.col = p.col / scale;
                     globalMaxAccum.angle = angle;//?
-                    globalMaxAccum.height = height;
-                    globalMaxAccum.width = width;
                 }
             }
         }
@@ -203,10 +210,9 @@ public:
             double k,
             int row,
             int col,
-            int height,
-            int width) const
+            AccumRatio& accumRatio) const
     {
-        for (int r = rad - 2; r <=  rad + 2; r++) {
+        for (int r = rad - 2; r <= rad + 2; r++) {
             int bound = 15;
 
             int start = angle - bound;
@@ -224,10 +230,10 @@ public:
                 Cell rect_coords[4] = { ptl, ptr, pbr, pbl };
                 std::vector <Cell> rotate_coords = rotate_rect(rect_coords, Cell(row, col), angle);
 
-                run_along_line(image, accum, rotate_coords[0], rotate_coords[1], accumScale, angleStep, angle, height, width);
-                run_along_line(image, accum, rotate_coords[1], rotate_coords[2], accumScale, angleStep, angle, height, width);
-                run_along_line(image, accum, rotate_coords[2], rotate_coords[3], accumScale, angleStep, angle, height, width);
-                run_along_line(image, accum, rotate_coords[3], rotate_coords[0], accumScale, angleStep, angle, height, width);
+                run_along_line(image, accum, rotate_coords[0], rotate_coords[1], accumScale, angleStep, angle, accumRatio);
+                run_along_line(image, accum, rotate_coords[1], rotate_coords[2], accumScale, angleStep, angle, accumRatio);
+                run_along_line(image, accum, rotate_coords[2], rotate_coords[3], accumScale, angleStep, angle, accumRatio);
+                run_along_line(image, accum, rotate_coords[3], rotate_coords[0], accumScale, angleStep, angle, accumRatio);
             }
         }
     }
@@ -236,16 +242,21 @@ public:
     {
         int start = boundaries.start;
         int end = boundaries.end;
-        double k = ((double)width / (double)height);
+        // double k = ((double)width / (double)height);
         for (int row = start; row < end; row++) {
             for (int col = 0; col < edges.cols; col++) {
                 if (edges.at<uchar>(row, col) == 0) {
                     continue;
                 }
-                run_rectangle(image, accums, accumScale, angleStep,
-                              angles.at<int>(row, col), height, k, row, col, height, width);
-                run_rectangle(image, accums, accumScale, angleStep,
-                              angles.at<int>(row, col) - 90, height, k, row, col, height, width);
+                for (int ratio = minAspectRatio, i = 0; ratio <= maxAspectRatio && i < accums.size(); ratio++, i++) {
+                    int height = sideSize / 2;
+                    int width = sideSize*ratio / 2;
+                    double k = ((double)width / (double)height);
+                    run_rectangle(image, accums[i].accums, accumScale, angleStep,
+                                  angles.at<int>(row, col), height, k, row, col, accums[i]);
+                    run_rectangle(image, accums[i].accums, accumScale, angleStep,
+                                  angles.at<int>(row, col) - 90, height, k, row, col, accums[i]);
+                }
             }
         }
     }
@@ -369,28 +380,32 @@ public:
         return res;
     }
 
-    void find_local_max(const std::vector<Accum>& accums, int windowSize, std::vector<AccumPoint>& localMax, AccumPoint& globalMaxAccum)
+    void find_local_max(const std::vector<AccumRatio>& accums, int windowSize, std::vector<AccumPoint>& localMax, AccumPoint& globalMaxAccum)
     {
-        for (int i = 0; i < accums.size() * 5 / 10; i++) {
-            assert(windowSize <= accums[i].accum.rows);
-            assert(windowSize <= accums[i].accum.cols);
+        // maxRegions = cv::Mat::zeros(image.rows / accumScale,
+        //                             image.cols / accumScale, CV_8UC1);
+        for (int j = 0; j < accums.size(); j++) {
+            for (int i = 0; i < accums[j].accums.size() * 5 / 10; i++) {
+                assert(windowSize <= accums[j].accums[i].accum.rows);
+                assert(windowSize <= accums[j].accums[i].accum.cols);
 
-            for (int row = 0; row < accums[i].accum.rows - windowSize; row += windowSize) {
-                for (int col = windowSize; col <= accums[i].accum.cols - windowSize; col += windowSize) {
+                for (int row = 0; row < accums[j].accums[i].accum.rows - windowSize; row += windowSize) {
+                    for (int col = windowSize; col <= accums[j].accums[i].accum.cols - windowSize; col += windowSize) {
 
-                    cv::Rect roi(
-                        col,
-                        row,
-                        ((row + windowSize) > accums[i].accum.rows ? accums[i].accum.rows - row : windowSize),
-                        ((col + windowSize) > accums[i].accum.cols ? accums[i].accum.cols - col : windowSize));
+                        cv::Rect roi(
+                            col,
+                            row,
+                            ((row + windowSize) > accums[j].accums[i].accum.rows ? accums[j].accums[i].accum.rows - row : windowSize),
+                            ((col + windowSize) > accums[j].accums[i].accum.cols ? accums[j].accums[i].accum.cols - col : windowSize));
 
-                    cv::Mat roiMat = accums[i].accum(roi);
+                        cv::Mat roiMat = accums[j].accums[i].accum(roi);
 
-                    double _min, _max;
-                    cv::Point minLoc, maxLoc;
-                    minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
-                    if (_max >= globalMaxAccum.value * 0.9) {
-                        localMax.push_back(AccumPoint((int)_max, accums[i].angle_scaled * angleStep, Cell(maxLoc.y + row, maxLoc.x + col)));
+                        double _min, _max;
+                        cv::Point minLoc, maxLoc;
+                        minMaxLoc(roiMat, &_min, &_max, &minLoc, &maxLoc);
+                        if (_max >= globalMaxAccum.value * 0.9) {
+                            localMax.push_back(AccumPoint((int)_max, accums[j].accums[i].angle_scaled * angleStep, Cell(maxLoc.y + row, maxLoc.x + col), 0, 0, accums[j].aspectRatio));
+                        }
                     }
                 }
             }
@@ -405,89 +420,102 @@ public:
             std::vector<AccumPoint>& rects)
     {
         int max_angle = (180 + 1) / angleStep;
-        // int difRatio = (maxAspectRatio - minAspectRatio);
-        std::vector<Accum> accums(max_angle + 1);
+        int difRatio = (maxAspectRatio - minAspectRatio);
+        std::vector<AccumRatio> accums(difRatio + 1);
 
-        // for (int i = 0, aspectRatio = minAspectRatio; i < accums.size() && aspectRatio <= maxAspectRatio; i++, aspectRatio++) {
-        //     int max_angle = (180 + 1) / angleStep;
-        //     accums[i].resize(max_angle + 1);
-        //     accums[i].aspectRatio = aspectRatio;
-        //     for (int j = 0; j < accums[j].size(); j++) {
-        //         accums[i][j].accum = cv::Mat::zeros(image.rows / accumScale,
-        //                                             image.cols / accumScale, CV_32SC1);
-        //         accums[i][j].angle_scaled = j;
-        //     }
-
-        // }
-
-        for (int j = 0; j <= max_angle; j ++) {
-            accums[j].accum = cv::Mat::zeros(image.rows / accumScale,
-                                             image.cols / accumScale, CV_32SC1);
-            accums[j].angle_scaled = j;
+        for (int i = 0, aspectRatio = minAspectRatio; i < accums.size() && aspectRatio <= maxAspectRatio; i++, aspectRatio++) {
+            accums[i].accums.resize(max_angle + 1);
+            accums[i].aspectRatio = aspectRatio;
+            for (int j = 0; j < accums[i].accums.size(); j++) {
+                accums[i].accums[j].accum = cv::Mat::zeros(image.rows / accumScale,
+                                                    image.cols / accumScale, CV_32SC1);
+                accums[i].accums[j].angle_scaled = j;
+            }
         }
 
         int numThreads = std::max(1, getNumThreads());
-        std::vector<AccumPoint> ratioMaximums(maxAspectRatio - minAspectRatio + 1);
-        for (int ratio = minAspectRatio, i = 0; ratio <= maxAspectRatio && i < ratioMaximums.size(); ratio++) {
-            int height = sideSize / 2;
-            int width = sideSize*ratio / 2;
-            AccumPoint ratioMaxAccum;
-            ratioMaxAccum.ratio = ratio;
-            parallel_for_(Range(0, edges.rows),
-                HoughRectsAccumInvoker(
-                    image, edges, angles, ratioMaxAccum,
-                    accums, width, height, accumScale,
-                    angleStep, sideSize, ratio),
-                numThreads);
-            if (ratioMaxAccum.value > globalMaxAccum.value) {
-                globalMaxAccum = ratioMaxAccum;
-            }
-            ratioMaximums[i] = ratioMaxAccum;
-        }
+        parallel_for_(Range(0, edges.rows),
+            HoughRectsAccumInvoker(
+                image, edges, angles, globalMaxAccum,
+                accums, minAspectRatio, maxAspectRatio, accumScale,
+                angleStep, sideSize),
+            numThreads);
 
         std::sort(accums.begin(), accums.end());
-        std::vector<AccumPoint> localMax;
-        find_local_max(accums, sideSize / accumScale, localMax, globalMaxAccum);
-        std::sort(localMax.begin(), localMax.end());
-        std::sort(ratioMaximums.begin(), ratioMaximums.end());
-        cv::Mat maxRegions;
-
-        maxRegions = cv::Mat::zeros(image.rows / accumScale,
-                                    image.cols / accumScale, CV_8UC1);
-        for (int i = 0; i < localMax.size(); i++) {
-            bool sameRect = false;
-            for (int j = 0; j < ratioMaximums.size() && !sameRect; j++) {
-                if (get_distance(localMax[i].cell, ratioMaximums[i].cell) < sideSize / accumScale) {
-                    if (maxRegions.at<uchar>(localMax[i].cell.row, localMax[i].cell.col) > 0) {
-                        sameRect = true;
-                    }
-                    localMax[i].ratio = ratioMaximums[i].ratio;
-                    rects.push_back(localMax[i]);
-                    for (int row = localMax[i].cell.row - sideSize / accumScale; row < localMax[i].cell.row + sideSize / accumScale; row++) {
-                        for (int col = localMax[i].cell.col - sideSize / accumScale; col < localMax[i].cell.col + sideSize / accumScale; col++) {
-                            if (row < maxRegions.rows && col < maxRegions.cols) {
-                                maxRegions.at<uchar>(row, col) = 1;
-                            }
-                        }
-                    }
-                    sameRect = true;
-                }
-            }
-            if (!sameRect) {
-                if (maxRegions.at<uchar>(localMax[i].cell.row, localMax[i].cell.col) == 0) {
-                    localMax[i].ratio = globalMaxAccum.ratio;
-                    rects.push_back(localMax[i]);
-                    for (int row = localMax[i].cell.row - sideSize / accumScale; row < localMax[i].cell.row + sideSize / accumScale; row++) {
-                        for (int col = localMax[i].cell.col - sideSize / accumScale; col < localMax[i].cell.col + sideSize / accumScale; col++) {
-                            if (row < maxRegions.rows && col < maxRegions.cols) {
-                                maxRegions.at<uchar>(row, col) = 1;
-                            }
-                        }
-                    }
-                }
-            }
-
+        for (int i = 0; i < accums.size(); i++) {
+            std::sort(accums[i].accums.begin(), accums[i].accums.end());
         }
+
+        find_local_max(accums, sideSize / accumScale, rects, globalMaxAccum);
+
+        // for (int j = 0; j <= max_angle; j ++) {
+        //     accums[j].accum = cv::Mat::zeros(image.rows / accumScale,
+        //                                      image.cols / accumScale, CV_32SC1);
+        //     accums[j].angle_scaled = j;
+        // }
+
+        // int numThreads = std::max(1, getNumThreads());
+        // std::vector<AccumPoint> ratioMaximums(maxAspectRatio - minAspectRatio + 1);
+        // for (int ratio = minAspectRatio, i = 0; ratio <= maxAspectRatio && i < ratioMaximums.size(); ratio++) {
+        //     int height = sideSize / 2;
+        //     int width = sideSize*ratio / 2;
+        //     AccumPoint ratioMaxAccum;
+        //     ratioMaxAccum.ratio = ratio;
+        //     parallel_for_(Range(0, edges.rows),
+        //         HoughRectsAccumInvoker(
+        //             image, edges, angles, ratioMaxAccum,
+        //             accums, width, height, accumScale,
+        //             angleStep, sideSize, ratio),
+        //         numThreads);
+        //     if (ratioMaxAccum.value > globalMaxAccum.value) {
+        //         globalMaxAccum = ratioMaxAccum;
+        //     }
+        //     ratioMaximums[i] = ratioMaxAccum;
+        // }
+
+        // std::sort(accums.begin(), accums.end());
+        // std::vector<AccumPoint> localMax;
+        // find_local_max(accums, sideSize / accumScale, localMax, globalMaxAccum);
+        // std::sort(localMax.begin(), localMax.end());
+        // std::sort(ratioMaximums.begin(), ratioMaximums.end());
+        // cv::Mat maxRegions;
+
+        // maxRegions = cv::Mat::zeros(image.rows / accumScale,
+        //                             image.cols / accumScale, CV_8UC1);
+        // for (int i = 0; i < localMax.size(); i++) {
+        //     bool sameRect = false;
+        //     for (int j = 0; j < ratioMaximums.size() && !sameRect; j++) {
+        //         if (get_distance(localMax[i].cell, ratioMaximums[i].cell) < sideSize / accumScale) {
+        //             if (maxRegions.at<uchar>(localMax[i].cell.row, localMax[i].cell.col) > 0) {
+        //                 sameRect = true;
+        //             }
+        //             localMax[i].ratio = ratioMaximums[i].ratio;
+        //             rects.push_back(localMax[i]);
+        //             for (int row = localMax[i].cell.row - sideSize / accumScale; row < localMax[i].cell.row + sideSize / accumScale; row++) {
+        //                 for (int col = localMax[i].cell.col - sideSize / accumScale; col < localMax[i].cell.col + sideSize / accumScale; col++) {
+        //                     if (row < maxRegions.rows && col < maxRegions.cols) {
+        //                         maxRegions.at<uchar>(row, col) = 1;
+        //                     }
+        //                 }
+        //             }
+        //             sameRect = true;
+        //         }
+        //     }
+        //     if (!sameRect) {
+        //         if (maxRegions.at<uchar>(localMax[i].cell.row, localMax[i].cell.col) == 0) {
+        //             localMax[i].ratio = globalMaxAccum.ratio;
+        //             rects.push_back(localMax[i]);
+        //             for (int row = localMax[i].cell.row - sideSize / accumScale; row < localMax[i].cell.row + sideSize / accumScale; row++) {
+        //                 for (int col = localMax[i].cell.col - sideSize / accumScale; col < localMax[i].cell.col + sideSize / accumScale; col++) {
+        //                     if (row < maxRegions.rows && col < maxRegions.cols) {
+        //                         maxRegions.at<uchar>(row, col) = 1;
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+
+        // }
     }
 
     void recognize(cv::Mat& src, std::vector<cv::Vec6f>& _rects, cv::Mat& edges, cv::Mat& angles)
@@ -500,7 +528,7 @@ public:
             cv::Vec6f rRect(
                 rects[i].cell.col * accumScale + accumScale / 2,
                 rects[i].cell.row * accumScale + accumScale / 2,
-                sideSize * minAspectRatio, sideSize, rects[0].angle, rects[0].value);
+                sideSize * rects[i].ratio, sideSize, rects[0].angle, rects[0].value);
             _rects.push_back(rRect);
         }
     }
@@ -548,3 +576,4 @@ void HoughRects(cv::InputArray image, cv::OutputArray rects, int sideSize, int m
 //     HoughRectRecognizer hr(rect_height, rect_width, rect_height / 2, rect_width / 2, accum_scale, angle_scale);
 //     return NULL;
 // }
+
