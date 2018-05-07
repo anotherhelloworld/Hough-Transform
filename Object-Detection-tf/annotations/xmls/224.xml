@@ -1,0 +1,26 @@
+<annotation>
+	<folder>images</folder>
+	<filename>224.jpeg</filename>
+	<path>/home/anothername/Documents/Object-Detection-tf/images/224.jpeg</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>400</width>
+		<height>300</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>red</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>215</xmin>
+			<ymin>115</ymin>
+			<xmax>283</xmax>
+			<ymax>171</ymax>
+		</bndbox>
+	</object>
+</annotation>
