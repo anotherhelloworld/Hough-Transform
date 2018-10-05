@@ -511,6 +511,11 @@ void HoughRects(cv::InputArray image, cv::OutputArray rects, int sideSize, int m
     return;
 }
 
+// CV_EXPORTS_W void HoughRects( InputArray image, OutputArray rects,
+//                               int sideSize = 0, int minAspectRatio = 0,
+//                               int maxAspectRatio = 0, int accumScale = 5,
+//                               int angleStep = 5 );
+
 // CV_IMPL CvSeq*
 // cvHoughRect(cv::InputArray src_image, int rect_height,
 //             int rect_width, int accum_scale, int angle_scale, int min_angle, int max_angle)
